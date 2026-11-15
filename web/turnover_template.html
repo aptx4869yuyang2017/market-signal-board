@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>两市成交额观测</title>
+<style>
+  :root{
+    --orange:#e8833a; --ink:#1f2328;
+    --muted:#6b7280; --line:#e8e6e1; --bg:#f7f6f3; --card:#ffffff;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1320px; margin:0 auto; padding:20px 24px 40px}
+  .layout{display:flex; gap:16px; align-items:flex-start}
+  .sidebar{width:112px; flex-shrink:0; display:flex; flex-direction:column; gap:8px; padding-top:4px; position:sticky; top:16px}
+  .sidebar a{display:block; text-align:center; text-decoration:none; border:1px solid var(--line); background:#fff; color:var(--muted);
+             padding:11px 6px; border-radius:10px; font-size:13px; line-height:1.3; transition:.15s}
+  .sidebar a:hover{border-color:#c9c4ba; color:var(--ink)}
+  .sidebar a.on{background:var(--ink); border-color:var(--ink); color:#fff}
+  .main{flex:1; min-width:0}
+  header{display:flex; justify-content:space-between; align-items:flex-end; gap:16px; flex-wrap:wrap; margin-bottom:12px}
+  h1{margin:0; font-size:23px; letter-spacing:.5px}
+  h1 .accent{color:var(--orange)}
+  .sub{margin:5px 0 0; color:var(--muted); font-size:12.5px}
+  .chip{display:inline-block; padding:2px 9px; border-radius:999px; background:#fff;
+        border:1px solid var(--line); color:var(--muted); font-size:11.5px; margin-left:8px}
+  .updated{color:var(--muted); font-size:11.5px; text-align:right; line-height:1.5}
+  .cards{display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin-bottom:14px}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px; min-width:0}
+  .card .k{font-size:11.5px; color:var(--muted); letter-spacing:.3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .card .v{font-size:25px; font-weight:600; margin-top:6px; line-height:1.1; font-variant-numeric:tabular-nums}
+  .card .d{font-size:11px; color:var(--muted); margin-top:5px; line-height:1.4}
+  .card.verdict .v{font-size:20px}
+  .panel{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px 8px; margin-bottom:14px}
+  .toolbar{display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:2px}
+  .ranges{display:flex; gap:5px}
+  .ranges button{border:1px solid var(--line); background:#fff; color:var(--muted); cursor:pointer;
+                 padding:5px 12px; border-radius:7px; font-size:12.5px; transition:.15s}
+  .ranges button:hover{border-color:#d9d5cd; color:var(--ink)}
+  .ranges button.on{background:var(--ink); border-color:var(--ink); color:#fff}
+  .hint{color:#9aa0a6; font-size:11.5px}
+  #chart{height:470px; width:100%}
+  h2{font-size:13.5px; margin:6px 4px 10px; color:var(--muted); font-weight:500; letter-spacing:.5px}
+  table{width:100%; border-collapse:collapse; font-size:13px; font-variant-numeric:tabular-nums}
+  th,td{padding:8px; text-align:right; border-bottom:1px solid #f2f0ec}
+  th{color:var(--muted); font-weight:500; font-size:12px}
+  th:first-child,td:first-child{text-align:left}
+  tbody tr:hover{background:#fbfaf8}
+  .pill{display:inline-block; padding:2px 10px; border-radius:999px; font-size:12px; border:1px solid transparent; white-space:nowrap}
+  footer{margin-top:18px; color:#9aa0a6; font-size:11.5px; line-height:1.9}
+  footer b{color:var(--muted); font-weight:500}
+  footer .rule{display:block; padding-left:14px}
+  @media (max-width:1080px){ .cards{grid-template-columns:repeat(3,1fr)} }
+  @media (max-width:760px){
+    .layout{flex-direction:column}
+    .sidebar{width:100%; flex-direction:row; position:static}
+    .sidebar a{flex:1}
+    .cards{grid-template-columns:repeat(2,1fr)}
+    .wrap{padding:16px 12px 32px}
+    #chart{height:380px}
+    .hint{display:none}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="layout">
+    <aside class="sidebar">
+      <a href="./index.html">股债<br>性价比</a>
+      <a href="./turnover.html" class="on">两市<br>成交额</a>
+    </aside>
+
+    <div class="main">
+      <header>
+        <div>
+          <h1>两市<span class="accent">成交额</span></h1>
+          <p class="sub">
+            日换手率 = 成交额 ÷ 沪深两市总市值 · 分位样本自 2024-09-24 · 数据截止 <b id="asof">—</b>
+            <span class="chip">每周六 10:00 自动更新</span>
+          </p>
+        </div>
+        <div class="updated">最近生成<br><span id="updated">—</span></div>
+      </header>
+
+      <section class="cards">
+        <div class="card">
+          <div class="k">本周日均换手率</div>
+          <div class="v" id="k-turn">—</div>
+          <div class="d" id="k-turn-d">—</div>
+        </div>
+        <div class="card" id="k-turn-pct-card">
+          <div class="k">日均换手率分位（924 以来）</div>
+          <div class="v" id="k-turn-pct">—</div>
+          <div class="d" id="k-turn-pct-d">—</div>
+        </div>
+        <div class="card verdict" id="k-verdict-card">
+          <div class="k">综合判断（924 以来）</div>
+          <div class="v" id="k-verdict">—</div>
+          <div class="d" id="k-verdict-d">—</div>
+        </div>
+        <div class="card">
+          <div class="k">本周日均成交额</div>
+          <div class="v" id="k-amount">—</div>
+          <div class="d" id="k-amount-d">—</div>
+        </div>
+        <div class="card" id="k-amount-pct-card">
+          <div class="k">本周日均成交额百分位（924 以来）</div>
+          <div class="v" id="k-amount-pct">—</div>
+          <div class="d" id="k-amount-pct-d">—</div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="toolbar">
+          <div class="ranges">
+            <button data-years="1">1 年</button>
+            <button data-years="3" class="on">3 年</button>
+            <button data-years="5">5 年</button>
+            <button data-years="10">10 年</button>
+            <button data-years="0">全部</button>
+          </div>
+          <div class="hint">图表区间 · 分位固定按 2024-09-24 以来计算 · 左轴换手率 / 右轴成交额 · 中证全指辅助 · 虚线为 924 以来 20% / 80% 分位</div>
+        </div>
+        <div id="chart"></div>
+      </section>
+
+      <section class="panel">
+        <h2 id="table-title">近 12 周台账</h2>
+        <table>
+          <thead>
+            <tr><th>日期</th><th>周日均成交额（亿）</th><th>周日均换手率</th><th>924以来分位</th><th>信号</th></tr>
+          </thead>
+          <tbody id="log-body"></tbody>
+        </table>
+      </section>
+
+      <footer>
+        <b>为什么要标准化：</b>总市值会随上市数量与股价上涨而扩张，成交额也会被动抬升，直接看绝对值（或它的历史分位）会系统性偏高。
+        用 <b>换手率 = 成交额 ÷ 沪深两市总市值</b> 剔除市值膨胀后，再比较历史分位，才能跨年份判断交易冷热。
+        本页分母用两市「市价总值」（总市值口径）；若换成自由流通市值，读数会更高、波动也更大，但冷热排序基本一致。<br>
+        <b>为什么分位从 924 起算：</b>2024-09-24 政策转向后，两市成交额从 0.5–1 万亿的平台系统性抬升到 1.5–3.5 万亿。
+        924 之前成交额中位数约 <b>0.62 万亿</b>、换手率约 <b>0.98%</b>；924 之后中位数约 <b>1.88 万亿</b>、换手率约 <b>1.88%</b>。
+        两个平台的量级不同，混在一起算分位会让当前读数被旧平台带偏，所以<b>所有分位（卡片、阈值线、台账）统一只用 2024-09-24 之后的样本</b>；
+        图上仍保留更早历史，便于观察这次平台跃迁。<br>
+        <b>卡片口径：</b>「本周日均」= 最近 5 个交易日的算术平均；对应分位 = 924 以来滚动 5 日均序列中低于当前值的占比，
+        用均值替代单日可降低噪声，更贴合周度观察节奏。<br>
+        <b>口径：</b>成交额、指数点位取中证全指（000985）日频数据；两市总市值取沪深交易所月度市价总值，月内按中证全指涨跌衔接、月末用官方值校准。
+        分位 = 924 以来样本中「低于当前值」的交易日占比，<b>越高越热</b>（与 ERP 分位方向相反）。<br>
+        <b>档位：</b>
+        <span class="rule">① 日均换手率分位 ≤20% 冷清（20–40 偏冷、40–60 正常、60–80 偏热、&gt;80 过热）；</span>
+        <span class="rule">② 图中两条水平虚线是 924 以来 20% / 80% 分位对应的换手率水平，跌破 20% 线偏冷、站上 80% 线偏热；</span>
+        <span class="rule">③ 冷暖底色仅标记 924 之后：换手率低于 20% 分位铺浅蓝（冷）、高于 80% 分位铺浅红（热），可在图例里独立开关；</span>
+        <span class="rule">④ 竖虚线标出 2024-09-24 政策转向；「成交额百分位」只作参考，它没有剔除市值增长，判断冷热以换手率分位为准。</span>
+        <b>配色：</b>换手率分位、综合判断两张卡片随档位变色（蓝 = 冷、黄 = 正常、橙红 = 热）；
+        成交额与换手率的「较上周」上涨用暖色、下跌用冷色，只表示冷热方向，不表示好坏。
+        <b>数据：</b>中证指数官网、沪深交易所月度市价总值。本页仅为个人监测工具，不构成投资建议。
+      </footer>
+    </div>
+  </div>
+</div>
+
+<script src="./echarts.min.js"></script>
+<script>
+const DATA = __DATA__;
+
+const fmt = (v, d) => (v === null || v === undefined || isNaN(v)) ? '—' : Number(v).toFixed(d);
+const signed = (v, d, unit) => (v > 0 ? '+' : '') + fmt(v, d) + (unit || '');
+const UP = '#c0392b';   // 成交额/换手率走高 = 更热（暖色）
+const DOWN = '#3b6ea5'; // 走低 = 更冷（冷色）
+
+let curYears = 3;
+let chart = null;
+
+const S = () => DATA.series;
+const pairs = (key) => DATA.series.dates.map((d, i) => [d, DATA.series[key][i]]);
+
+function tierFor(pct) {
+  const tiers = DATA.tiers || [];
+  return tiers.find(t => pct <= t.max) || {label: '—', color: '#6b7280'};
+}
+
+function tierColor(label) {
+  const t = (DATA.tiers || []).find(x => x.label === label);
+  return t ? t.color : '#6b7280';
+}
+
+function renderStatic() {
+  const st = DATA.stats;
+  document.getElementById('asof').textContent = DATA.asof;
+  document.getElementById('updated').textContent = DATA.updated;
+
+  // 本周日均换手率（最近 5 个交易日均值）
+  document.getElementById('k-turn').textContent = fmt(st.week_turn, 2) + '%';
+  const tc = Math.abs(st.turn_chg) < 0.005 ? 0 : st.turn_chg;
+  document.getElementById('k-turn-d').innerHTML =
+    '较上周 <b style="color:' + (tc > 0 ? UP : tc < 0 ? DOWN : '#6b7280') + '">'
+    + signed(tc, 2, 'pp') + '</b>'
+    + '　市值 ' + fmt(st.cap_wan, 1) + ' 万亿';
+
+  // 本周日均成交额
+  document.getElementById('k-amount').textContent = fmt(st.week_amount, 0) + ' 亿';
+  const ac = Math.abs(st.amount_chg_pct) < 0.05 ? 0 : st.amount_chg_pct;
+  document.getElementById('k-amount-d').innerHTML =
+    '较上周 <b style="color:' + (ac > 0 ? UP : ac < 0 ? DOWN : '#6b7280') + '">'
+    + signed(ac, 1, '%') + '</b>';
+}
+
+function toneCard(id, pct) {
+  const card = document.getElementById(id);
+  if (!card || pct === null || pct === undefined) return;
+  const t = tierFor(pct);
+  card.style.background = t.color + '14';
+  card.style.borderColor = t.color + '55';
+  const v = card.querySelector('.v');
+  if (v) v.style.color = t.color;
+  const k = card.querySelector('.k');
+  if (k) k.title = t.label + '（分位 ' + fmt(pct, 1) + '%）';
+}
+
+function renderRegime() {
+  const w = DATA.regime;
+  const span = ' · 样本 ' + w.start + ' 起（' + w.days + ' 个交易日）';
+  document.getElementById('k-turn-pct').textContent = fmt(w.turn_pct, 1) + '%';
+  document.getElementById('k-turn-pct-d').textContent = '低于当前均值的交易日占比' + span;
+
+  document.getElementById('k-amount-pct').textContent = fmt(w.amount_pct, 1) + '%';
+  document.getElementById('k-amount-pct-d').textContent = '未剔除市值增长' + span;
+
+  toneCard('k-turn-pct-card', w.turn_pct);
+  toneCard('k-amount-pct-card', w.amount_pct);
+
+  const card = document.getElementById('k-verdict-card');
+  card.style.background = w.bg;
+  card.style.borderColor = w.border;
+  const v = document.getElementById('k-verdict');
+  v.textContent = w.tier;
+  v.style.color = w.color;
+  document.getElementById('k-verdict-d').textContent = w.note;
+}
+
+function renderTable() {
+  const body = document.getElementById('log-body');
+  body.innerHTML = '';
+  DATA.log.slice().reverse().forEach(r => {
+    const color = tierColor(r.tier);
+    const pill = `<span class="pill" style="background:${color}14;color:${color};border-color:${color}40">${r.tier}</span>`;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${r.date}</td><td>${fmt(r.amount, 0)}</td><td>${fmt(r.turn, 2)}%</td>`
+      + `<td>${fmt(r.pct, 1)}%</td><td>${pill}</td>`;
+    body.appendChild(tr);
+  });
+}
+
+function yearsAgoStart(years) {
+  const d = DATA.series.dates, n = d.length;
+  if (!years) return [0, 100];
+  const end = new Date(d[n - 1]).getTime();
+  const start = end - years * 365.25 * 864e5;
+  let i = 0;
+  while (i < n && new Date(d[i]).getTime() < start) i++;
+  return [Math.max(0, i / Math.max(1, n - 1) * 100), 100];
+}
+
+function applyRange(years, btn) {
+  curYears = years;
+  if (chart) {
+    chart.dispatchAction({type: 'dataZoom', dataZoomIndex: 0, start: yearsAgoStart(years)[0], end: 100});
+    chart.dispatchAction({type: 'dataZoom', dataZoomIndex: 1, start: yearsAgoStart(years)[0], end: 100});
+  }
+  if (btn) {
+    document.querySelectorAll('.ranges button').forEach(b => b.classList.remove('on'));
+    btn.classList.add('on');
+  }
+}
+
+function tooltipHtml(ps) {
+  const i = ps[0].dataIndex, s = S();
+  const chg = i > 0 ? s.amount[i] - s.amount[i - 1] : 0;
+  return `<div style="font-weight:600;margin-bottom:6px">${s.dates[i]}</div>`
+    + `<div>成交额　　<b style="color:#7d9db5">${fmt(s.amount[i], 0)} 亿</b>`
+    + `<span style="color:${chg >= 0 ? UP : DOWN};margin-left:6px">${signed(chg, 0)}</span></div>`
+    + `<div>换手率　　<b style="color:#e8833a">${fmt(s.turn[i], 2)}%</b></div>`
+    + `<div>中证全指　<b style="color:#a8a49c">${fmt(s.close[i], 0)}</b></div>`
+    + `<div>两市总市值 ${fmt(s.cap[i], 1)} 万亿</div>`;
+}
+
+// 冷暖背景：仅 924 之后，换手率低于 20% 分位 → 冷（浅蓝），高于 80% 分位 → 热（浅红）
+function zoneBands() {
+  const d = DATA.series.dates, v = DATA.series.turn, st = DATA.stats;
+  const startTs = new Date(DATA.regime.start).getTime();
+  const ts = i => new Date(d[i]).getTime();
+
+  // 只在 924 之后的区间里找连续段
+  const runs = inside => {
+    const out = [];
+    let s = -1;
+    for (let i = 0; i < v.length; i++) {
+      if (ts(i) < startTs) { s = -1; continue; }
+      if (inside(v[i])) { if (s < 0) s = i; }
+      else if (s >= 0) { out.push([s, i - 1]); s = -1; }
+    }
+    if (s >= 0) out.push([s, v.length - 1]);
+    // 合并间隔 ≤6 个交易日的小缺口，过滤不足 5 个交易日的碎片
+    const merged = [];
+    for (const r of out) {
+      const last = merged[merged.length - 1];
+      if (last && r[0] - last[1] <= 6) last[1] = r[1];
+      else merged.push([r[0], r[1]]);
+    }
+    return merged.filter(r => r[1] - r[0] + 1 >= 5);
+  };
+
+  const data = [];
+  const add = (list, color) => list.forEach(([a, b]) => data.push([
+    {xAxis: ts(a), itemStyle: {color}},
+    {xAxis: b + 1 < d.length ? ts(b + 1) : ts(b) + 864e5}
+  ]));
+  add(runs(x => x <= st.cold), 'rgba(59,110,165,.10)');   // 冷：浅蓝
+  add(runs(x => x >= st.hot),  'rgba(192,57,43,.10)');    // 热：浅红
+  return data;
+}
+
+function initChart() {
+  if (typeof echarts === 'undefined') throw new Error('echarts.min.js 未加载');
+  chart = echarts.init(document.getElementById('chart'), null, {renderer: 'canvas'});
+  const [s0, e0] = yearsAgoStart(curYears);
+  const st = DATA.stats;
+
+  chart.setOption({
+    animation: false,
+    axisPointer: {link: [{xAxisIndex: 'all'}], lineStyle: {color: '#c9c5bd', type: 'dashed'}},
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: 'rgba(255,255,255,.97)',
+      borderColor: '#e8e6e1',
+      textStyle: {color: '#1f2328', fontSize: 12},
+      formatter: tooltipHtml
+    },
+    legend: {
+      data: ['换手率', '成交额', '中证全指', '冷暖背景'],
+      selected: {'成交额': false},
+      top: 6, left: 0, icon: 'roundRect', itemWidth: 14, itemHeight: 3,
+      textStyle: {color: '#6b7280', fontSize: 12}
+    },
+    toolbox: {right: 6, top: 0, feature: {saveAsImage: {title: '导出图片', pixelRatio: 2}}},
+    grid: {left: 64, right: 120, top: 40, bottom: 56},
+    xAxis: {
+      type: 'time', axisTick: {show: false},
+      axisLine: {lineStyle: {color: '#e2dfd8'}},
+      axisLabel: {color: '#8a8f98', fontSize: 10, hideOverlap: true}, splitLine: {show: false}
+    },
+    yAxis: [
+      {type: 'value', scale: true, position: 'left',
+       min: v => Math.min(v.min, Math.floor(DATA.stats.cold * 10) / 10),
+       axisLabel: {color: '#8a8f98', fontSize: 11, formatter: v => v + '%'},
+       splitLine: {lineStyle: {color: '#f0eee9', type: 'dotted'}}},
+      {type: 'value', scale: true, position: 'right',
+       axisLabel: {color: '#7d9db5', fontSize: 11, formatter: v => (v / 10000).toFixed(1) + '万亿'},
+       splitLine: {show: false}},
+      {type: 'value', scale: true, position: 'right', offset: 60,
+       axisLabel: {color: '#a8a49c', fontSize: 11},
+       splitLine: {show: false}}
+    ],
+    dataZoom: [
+      {type: 'inside', xAxisIndex: 0, start: s0, end: e0,
+       zoomOnMouseWheel: true, moveOnMouseMove: true, moveOnMouseWheel: false},
+      {type: 'slider', xAxisIndex: 0, start: s0, end: e0,
+       bottom: 8, height: 16, borderColor: 'transparent',
+       backgroundColor: '#f4f2ee', fillerColor: 'rgba(232,131,58,.10)',
+       handleStyle: {color: '#fff', borderColor: '#d9d5cd'},
+       dataBackground: {lineStyle: {color: '#c9c5bd'}, areaStyle: {color: '#eeeeea'}},
+       textStyle: {color: '#9aa0a6', fontSize: 10}}
+    ],
+    series: [
+      // 冷暖背景单独成一个 series，可在图例独立开关
+      {name: '冷暖背景', type: 'line', data: [],
+       showSymbol: false, silent: true, tooltip: {show: false},
+       lineStyle: {width: 0, opacity: 0}, itemStyle: {color: '#cfcac1'}, z: 0,
+       markArea: {silent: true, animation: false, data: zoneBands()}},
+      {name: '换手率', type: 'line', yAxisIndex: 0, data: pairs('turn'),
+       showSymbol: false, lineStyle: {width: 2, color: '#e8833a'},
+       itemStyle: {color: '#e8833a'}, z: 3,
+       markLine: {
+         silent: true, symbol: 'none', animation: false,
+         lineStyle: {color: '#cfcac1', type: 'dashed', width: 1},
+         label: {color: '#a8a49c', fontSize: 11, position: 'insideStartTop',
+                 backgroundColor: 'rgba(255,255,255,.88)', padding: [2, 5], borderRadius: 2},
+         data: [
+           {yAxis: st.hot, label: {formatter: '924以来 80% 分位 ' + st.hot + '%'}},
+           {yAxis: st.cold, label: {formatter: '924以来 20% 分位 ' + st.cold + '%'}},
+           {xAxis: new Date(DATA.regime.start).getTime(),
+            lineStyle: {color: '#b9b3a8', type: 'dotted', width: 1},
+            label: {formatter: '924 政策转向', position: 'insideEndTop', rotate: 0}}
+         ]
+       }},
+      {name: '成交额', type: 'line', yAxisIndex: 1, data: pairs('amount'),
+       showSymbol: false, lineStyle: {width: 1.2, color: '#7d9db5', opacity: .85},
+       itemStyle: {color: '#7d9db5'}, z: 2},
+      {name: '中证全指', type: 'line', yAxisIndex: 2, data: pairs('close'),
+       showSymbol: false, lineStyle: {width: 1.2, color: '#a8a49c', opacity: .9},
+       itemStyle: {color: '#a8a49c'}, z: 1}
+    ]
+  });
+
+  document.querySelectorAll('.ranges button').forEach(btn => {
+    btn.addEventListener('click', () => applyRange(Number(btn.dataset.years), btn));
+  });
+  chart.getZr().on('dblclick', () => {
+    applyRange(3, document.querySelector('.ranges button[data-years="3"]'));
+  });
+  window.addEventListener('resize', () => chart.resize());
+}
+
+renderStatic();
+renderTable();
+renderRegime();
+try {
+  initChart();
+} catch (e) {
+  document.getElementById('chart').innerHTML =
+    '<div style="padding:64px 24px;text-align:center;color:#b04a3a;font-size:13px;line-height:1.9">'
+    + '图表未能加载：' + e.message
+    + '<br>请确认 <b>echarts.min.js</b> 与 <b>turnover.html</b> 在同一目录（web/）下。'
+    + '</div>';
+}
+</script>
+</body>
+</html>

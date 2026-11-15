@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>股债性价比监控</title>
+<style>
+  :root{
+    --orange:#e8833a; --ink:#1f2328;
+    --muted:#6b7280; --line:#e8e6e1; --bg:#f7f6f3; --card:#ffffff;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1320px; margin:0 auto; padding:20px 24px 40px}
+  .layout{display:flex; gap:16px; align-items:flex-start}
+  .sidebar{width:112px; flex-shrink:0; display:flex; flex-direction:column; gap:8px; padding-top:4px; position:sticky; top:16px}
+  .sidebar a{display:block; text-align:center; text-decoration:none; border:1px solid var(--line); background:#fff; color:var(--muted);
+             padding:11px 6px; border-radius:10px; font-size:13px; line-height:1.3; transition:.15s}
+  .sidebar a:hover{border-color:#c9c4ba; color:var(--ink)}
+  .sidebar a.on{background:var(--ink); border-color:var(--ink); color:#fff}
+  .main{flex:1; min-width:0}
+  header{display:flex; justify-content:space-between; align-items:flex-end; gap:16px; flex-wrap:wrap; margin-bottom:12px}
+  h1{margin:0; font-size:23px; letter-spacing:.5px}
+  h1 .accent{color:var(--orange)}
+  .sub{margin:5px 0 0; color:var(--muted); font-size:12.5px}
+  .chip{display:inline-block; padding:2px 9px; border-radius:999px; background:#fff;
+        border:1px solid var(--line); color:var(--muted); font-size:11.5px; margin-left:8px}
+  .updated{color:var(--muted); font-size:11.5px; text-align:right; line-height:1.5}
+  .nav{display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px}
+  .nav a{text-decoration:none; border:1px solid var(--line); background:#fff; color:var(--muted);
+         padding:6px 16px; border-radius:999px; font-size:13px; transition:.15s}
+  .nav a:hover{border-color:#c9c4ba; color:var(--ink)}
+  .nav a.on{background:var(--ink); border-color:var(--ink); color:#fff}
+  .tabs{display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px}
+  .tabs button{border:1px solid var(--line); background:#fff; color:var(--muted); cursor:pointer;
+               padding:6px 16px; border-radius:999px; font-size:13px; transition:.15s}
+  .tabs button:hover{border-color:#c9c4ba; color:var(--ink)}
+  .tabs button.on{background:var(--ink); border-color:var(--ink); color:#fff}
+  .cards{display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin-bottom:14px}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px; min-width:0}
+  .card .k{font-size:11.5px; color:var(--muted); letter-spacing:.3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .card .v{font-size:25px; font-weight:600; margin-top:6px; line-height:1.1; font-variant-numeric:tabular-nums}
+  .card .d{font-size:11px; color:var(--muted); margin-top:5px; line-height:1.4}
+  .card.verdict .v{font-size:20px}
+  .panel{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px 8px; margin-bottom:14px}
+  .toolbar{display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:2px}
+  .ranges{display:flex; gap:5px}
+  .ranges button{border:1px solid var(--line); background:#fff; color:var(--muted); cursor:pointer;
+                 padding:5px 12px; border-radius:7px; font-size:12.5px; transition:.15s}
+  .ranges button:hover{border-color:#d9d5cd; color:var(--ink)}
+  .ranges button.on{background:var(--ink); border-color:var(--ink); color:#fff}
+  .hint{color:#9aa0a6; font-size:11.5px}
+  #chart{height:500px; width:100%}
+  h2{font-size:13.5px; margin:6px 4px 10px; color:var(--muted); font-weight:500; letter-spacing:.5px}
+  table{width:100%; border-collapse:collapse; font-size:13px; font-variant-numeric:tabular-nums}
+  th,td{padding:8px; text-align:right; border-bottom:1px solid #f2f0ec}
+  th{color:var(--muted); font-weight:500; font-size:12px}
+  th:first-child,td:first-child{text-align:left}
+  tbody tr:hover{background:#fbfaf8}
+  .pill{display:inline-block; padding:2px 10px; border-radius:999px; font-size:12px; border:1px solid transparent; white-space:nowrap}
+  footer{margin-top:18px; color:#9aa0a6; font-size:11.5px; line-height:1.9}
+  footer b{color:var(--muted); font-weight:500}
+  footer .rule{display:block; padding-left:14px}
+  @media (max-width:1080px){ .cards{grid-template-columns:repeat(3,1fr)} }
+  @media (max-width:760px){
+    .layout{flex-direction:column}
+    .sidebar{width:100%; flex-direction:row; position:static}
+    .sidebar a{flex:1}
+    .cards{grid-template-columns:repeat(2,1fr)}
+    .wrap{padding:16px 12px 32px}
+    #chart{height:420px}
+    .hint{display:none}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="layout">
+    <aside class="sidebar">
+      <a href="./index.html" class="on">股债<br>性价比</a>
+      <a href="./turnover.html">两市<br>成交额</a>
+    </aside>
+
+    <div class="main">
+      <header>
+        <div>
+          <h1>股债<span class="accent">性价比</span></h1>
+          <p class="sub">
+            指数收益率 − 十年期国债收益率（ERP） · 数据截止 <b id="asof">—</b>
+            <span class="chip">每周六 10:00 自动更新</span>
+          </p>
+        </div>
+        <div class="updated">最近生成<br><span id="updated">—</span></div>
+      </header>
+
+      <div class="tabs" id="tabs"></div>
+
+  <section class="cards">
+    <div class="card">
+      <div class="k">最新 ERP</div>
+      <div class="v" id="k-erp">—</div>
+      <div class="d" id="k-change">—</div>
+    </div>
+    <div class="card" id="k-erp-pct-card">
+      <div class="k">ERP 分位数</div>
+      <div class="v" id="k-erp-pct">—</div>
+      <div class="d" id="k-erp-pct-d">—</div>
+    </div>
+    <div class="card">
+      <div class="k">指数收益率</div>
+      <div class="v" id="k-ey">—</div>
+      <div class="d" id="k-ey-d">—</div>
+    </div>
+    <div class="card" id="k-ey-pct-card">
+      <div class="k">指数收益率分位数</div>
+      <div class="v" id="k-ey-pct">—</div>
+      <div class="d" id="k-ey-pct-d">—</div>
+    </div>
+    <div class="card verdict" id="k-verdict-card">
+      <div class="k">综合判断</div>
+      <div class="v" id="k-verdict">—</div>
+      <div class="d" id="k-verdict-d">—</div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="toolbar">
+      <div class="ranges">
+        <button data-years="1">1 年</button>
+        <button data-years="3">3 年</button>
+        <button data-years="5" class="on">5 年</button>
+        <button data-years="10">10 年</button>
+        <button data-years="0">全部</button>
+      </div>
+      <div class="hint">滚轮缩放 · 拖动平移 · 双击复位 · 上下两图共用时间轴 · 浅绿底 = 加仓时段</div>
+    </div>
+    <div id="chart"></div>
+  </section>
+
+  <section class="panel">
+    <h2 id="table-title">近 12 周台账</h2>
+    <table>
+      <thead>
+        <tr><th>日期</th><th>无风险利率</th><th>指数收益率</th><th>ERP</th><th>5年分位</th><th>10年分位</th><th>信号 · 10年</th></tr>
+      </thead>
+      <tbody id="log-body"></tbody>
+    </table>
+  </section>
+
+  <footer>
+    <b>口径：</b>指数收益率 = 1 ÷ 指数市盈率；ERP = 指数收益率 − 10 年期国债收益率（bp）。
+    分位 = 窗口内「比当前更便宜」的天数占比，因此 20% 意味着历史上只有两成时间比现在更便宜。<br>
+    <b>信号怎么来的：</b>
+    <span class="rule">① ERP 的窗口分位 ≤20% 判为「极端便宜」（20–40 偏便宜、40–60 中性、60–80 偏贵、&gt;80 贵）；</span>
+    <span class="rule">② 双确认：指数收益率的同一窗口分位 ≤<span id="conf-pct">40</span>%，说明便宜不是只靠利率下行撑起来的；</span>
+    <span class="rule">③ 两条都过 = 双确认；只有 ① 过 = 单边便宜（利率在动、估值没动，不宜直接加仓）；都不过 = 中性或偏贵。</span>
+    <span class="rule">④ 卡片随所选指数与时间窗口实时重算；周报固定用主指数 + 10 年窗口。</span>
+    <span class="rule">⑤ 图中的加仓线 / 防守线是该指数 ERP 的 80% / 20% 分位，随指数自动换算；ERP 站上加仓线的时段铺浅绿底（加仓区间），跌破防守线的时段铺浅红底（防守区间），图例里的「区间背景」可单独开关。</span>
+    <b>配色：</b>ERP 分位、估值分位、综合判断三张卡片随档位变色（绿 = 便宜、黄 = 中性、橙红 = 贵）；
+    ERP 较上周走高（股票更便宜）为绿、走低为红；利率变化只陈述数值，不染色。
+    <b>数据：</b>中证指数官网（000985/000300/000905/000922/000688）、中债登 10 年期国债收益率。本页仅为个人监测工具，不构成投资建议。
+  </footer>
+    </div>
+  </div>
+</div>
+
+<script src="./echarts.min.js"></script>
+<script>
+const DATA = __DATA__;
+const WL = {"1": "近一年", "3": "近三年", "5": "近五年", "10": "近十年", "0": "全部"};
+
+const fmt = (v, d) => (v === null || v === undefined || isNaN(v)) ? '—' : Number(v).toFixed(d);
+const signed = (v, d, unit) => (v > 0 ? '+' : '') + fmt(v, d) + (unit || '');
+
+let CUR = DATA.indices[0];
+let curYears = 5;
+let chart = null;
+
+const dates = () => CUR.series.dates;
+const pairs = (key) => CUR.series.dates.map((d, i) => [d, CUR.series[key][i]]);
+
+function renderTabs() {
+  const box = document.getElementById('tabs');
+  DATA.indices.forEach((it, i) => {
+    const b = document.createElement('button');
+    b.textContent = it.name;
+    if (i === 0) b.classList.add('on');
+    b.addEventListener('click', () => switchIndex(i));
+    box.appendChild(b);
+  });
+}
+
+function renderStatic() {
+  const st = CUR.stats;
+  document.getElementById('asof').textContent = st.asof;
+  document.getElementById('updated').textContent = st.updated;
+  document.getElementById('k-erp').textContent = fmt(st.erp_bp, 0) + 'bp';
+  document.getElementById('k-ey').textContent = fmt(st.ey, 2) + '%';
+  document.getElementById('k-ey-d').textContent = 'PE ' + fmt(st.pe, 2);
+  document.getElementById('table-title').textContent = '近 12 周台账 · ' + CUR.name;
+
+  const cw = Math.abs(st.change_1w) < 1 ? 0 : st.change_1w;
+  const color = cw > 0 ? '#2e7d5b' : (cw < 0 ? '#c0392b' : '#6b7280');
+  // 无风险利率：与上年末比较，仅陈述变化，不染色
+  const ytd = (st.y10_ytd_bp === null || st.y10_ytd_bp === undefined) ? null : st.y10_ytd_bp;
+  const ytdTxt = ytd === null ? '—' : signed(ytd, 0, 'bp');
+  const ytdTitle = (st.y10_prev === null || st.y10_prev === undefined)
+    ? '' : '年初（' + st.y10_prev_date + '）' + fmt(st.y10_prev, 2) + '%';
+  document.getElementById('k-change').innerHTML =
+    '较上周 <b style="color:' + color + '">' + signed(cw, 0, 'bp') + '</b>'
+    + '<br><span title="' + ytdTitle + '">利率 ' + fmt(st.y10, 2) + '%（较年初 ' + ytdTxt + '）</span>';
+}
+
+function tierFor(pct) {
+  const tiers = DATA.tiers || [];
+  return tiers.find(t => pct <= t.max) || {label: '—', color: '#6b7280'};
+}
+
+// 给 KPI 卡片上色：数值、底色、边框都跟档位一致
+function toneCard(id, pct) {
+  const card = document.getElementById(id);
+  if (!card || pct === null || pct === undefined) return;
+  const t = tierFor(pct);
+  card.style.background = t.color + '14';
+  card.style.borderColor = t.color + '55';
+  const v = card.querySelector('.v');
+  if (v) v.style.color = t.color;
+  const k = card.querySelector('.k');
+  if (k) k.title = t.label + '（分位 ' + fmt(pct, 1) + '%）';
+}
+
+function renderWindow(key) {
+  const w = CUR.by_window[key];
+  if (!w) return;
+  document.getElementById('k-erp-pct').textContent = fmt(w.erp_pct, 1) + '%';
+  document.getElementById('k-erp-pct-d').textContent = WL[key] + '窗口 · 比现在更便宜的天数';
+  document.getElementById('k-ey-pct').textContent = fmt(w.ey_pct, 1) + '%';
+  document.getElementById('k-ey-pct-d').textContent = WL[key] + '窗口 · 纯估值口径';
+
+  // 分位卡片按档位上色（越低越便宜的同一套阈值）
+  toneCard('k-erp-pct-card', w.erp_pct);
+  toneCard('k-ey-pct-card', w.ey_pct);
+
+  const card = document.getElementById('k-verdict-card');
+  card.style.background = w.bg;
+  card.style.borderColor = w.border;
+  const v = document.getElementById('k-verdict');
+  v.textContent = w.tier;
+  v.style.color = w.color;
+  document.getElementById('k-verdict-d').textContent = w.verdict;
+}
+
+function renderTable() {
+  const body = document.getElementById('log-body');
+  body.innerHTML = '';
+  CUR.log.slice().reverse().forEach(r => {
+    const color = DATA.tier_colors[r.tier] || '#6b7280';
+    const pill = `<span class="pill" style="background:${color}14;color:${color};border-color:${color}40">${r.tier}</span>`;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${r.date}</td><td>${fmt(r.y10, 2)}%</td><td>${fmt(r.ey, 2)}%</td>`
+      + `<td>${fmt(r.erp_bp, 0)}bp</td><td>${fmt(r.pct5y, 1)}%</td><td>${fmt(r.pct10y, 1)}%</td>`
+      + `<td>${pill}</td>`;
+    body.appendChild(tr);
+  });
+}
+
+function yearsAgoStart(years) {
+  const d = dates(), n = d.length;
+  if (!years) return [0, 100];
+  const end = new Date(d[n - 1]).getTime();
+  const start = end - years * 365.25 * 864e5;
+  let i = 0;
+  while (i < n && new Date(d[i]).getTime() < start) i++;
+  return [Math.max(0, i / Math.max(1, n - 1) * 100), 100];
+}
+
+function applyRange(years, btn) {
+  curYears = years;
+  if (chart) {
+    const [s, e] = yearsAgoStart(years);
+    chart.dispatchAction({type: 'dataZoom', dataZoomIndex: 0, start: s, end: e});
+    chart.dispatchAction({type: 'dataZoom', dataZoomIndex: 1, start: s, end: e});
+  }
+  if (btn) {
+    document.querySelectorAll('.ranges button').forEach(b => b.classList.remove('on'));
+    btn.classList.add('on');
+  }
+  renderWindow(String(years));
+}
+
+function switchIndex(i) {
+  CUR = DATA.indices[i];
+  document.querySelectorAll('.tabs button').forEach((b, j) => b.classList.toggle('on', j === i));
+  renderStatic();
+  renderTable();
+  if (chart) setChartSeries();
+  applyRange(curYears);
+  if (chart) chart.resize();
+}
+
+function tooltipHtml(ps) {
+  const i = ps[0].dataIndex, s = CUR.series;
+  const chg = i > 0 ? s.erp_bp[i] - s.erp_bp[i - 1] : 0;
+  return `<div style="font-weight:600;margin-bottom:6px">${s.dates[i]} · ${CUR.name}</div>`
+    + `<div>ERP　　<b style="color:#e8833a">${fmt(s.erp_bp[i], 0)}bp</b>`
+    + `<span style="color:${chg >= 0 ? '#2e7d5b' : '#c0392b'};margin-left:6px">${signed(chg, 0)}</span></div>`
+    + `<div>指数收益率 ${fmt(s.ey[i], 2)}%</div>`
+    + `<div>无风险利率 ${fmt(s.y10[i], 2)}%</div>`
+    + `<div>市盈率　　${fmt(s.pe[i], 2)}</div>`
+    + `<div>指数点位　${fmt(s.close[i], 0)}</div>`;
+}
+
+function zoneBands() {
+  // 找出 ERP 站上加仓线 / 跌破防守线的连续时段，逐段铺浅绿 / 浅红底色
+  const d = CUR.series.dates, v = CUR.series.erp_bp, st = CUR.stats;
+  const ts = i => new Date(d[i]).getTime();
+
+  const runs = inside => {
+    const out = [];
+    let s = -1;
+    for (let i = 0; i < v.length; i++) {
+      if (inside(v[i])) { if (s < 0) s = i; }
+      else if (s >= 0) { out.push([s, i - 1]); s = -1; }
+    }
+    if (s >= 0) out.push([s, v.length - 1]);
+    // 合并间隔 ≤5 个交易日的小缺口，过滤不足 5 个交易日的碎片，避免噪声竖条
+    const merged = [];
+    for (const r of out) {
+      const last = merged[merged.length - 1];
+      if (last && r[0] - last[1] <= 6) last[1] = r[1];
+      else merged.push([r[0], r[1]]);
+    }
+    return merged.filter(r => r[1] - r[0] + 1 >= 5);
+  };
+
+  const data = [];
+  const add = (list, color) => list.forEach(([a, b]) => data.push([
+    {xAxis: ts(a), itemStyle: {color}},
+    {xAxis: b + 1 < d.length ? ts(b + 1) : ts(b) + 864e5}
+  ]));
+  add(runs(x => x >= st.cheap), 'rgba(27,127,75,.07)');
+  add(runs(x => x <= st.rich), 'rgba(192,57,43,.07)');
+  return data;
+}
+
+function setChartSeries() {
+  const st = CUR.stats;
+  chart.setOption({
+    legend: [
+      {data: ['ERP', CUR.name, '区间背景']},
+      {data: ['指数收益率', '无风险利率']}
+    ],
+    series: [
+      {markArea: {data: zoneBands()}},
+      {name: CUR.name, data: pairs('close')},
+      {data: pairs('erp_bp'), markLine: {data: [
+        {yAxis: st.cheap, label: {formatter: st.cheap + 'bp 加仓线'}},
+        {yAxis: st.rich, label: {formatter: st.rich + 'bp 防守线'}}
+      ]}},
+      {data: pairs('ey')},
+      {data: pairs('y10')}
+    ]
+  });
+}
+
+function initChart() {
+  if (typeof echarts === 'undefined') throw new Error('echarts.min.js 未加载');
+  chart = echarts.init(document.getElementById('chart'), null, {renderer: 'canvas'});
+  const [s0, e0] = yearsAgoStart(curYears);
+  const st = CUR.stats;
+
+  chart.setOption({
+    animation: false,
+    axisPointer: {link: [{xAxisIndex: 'all'}], lineStyle: {color: '#c9c5bd', type: 'dashed'}},
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: 'rgba(255,255,255,.97)',
+      borderColor: '#e8e6e1',
+      textStyle: {color: '#1f2328', fontSize: 12},
+      formatter: tooltipHtml
+    },
+    legend: [
+      {data: ['ERP', CUR.name, '区间背景'], top: 6, left: 0, icon: 'roundRect', itemWidth: 14, itemHeight: 3,
+       textStyle: {color: '#6b7280', fontSize: 12}},
+      {data: ['指数收益率', '无风险利率'], top: 272, left: 0, icon: 'roundRect', itemWidth: 14, itemHeight: 3,
+       textStyle: {color: '#6b7280', fontSize: 12}}
+    ],
+    toolbox: {right: 6, top: 0, feature: {saveAsImage: {title: '导出图片', pixelRatio: 2}}},
+    grid: [
+      {left: 64, right: 74, top: 34, height: 196},
+      {left: 64, right: 20, top: 300, height: 132}
+    ],
+    xAxis: [
+      {type: 'time', gridIndex: 0, axisLabel: {show: false}, axisTick: {show: false},
+       axisLine: {lineStyle: {color: '#e2dfd8'}}, splitLine: {show: false}},
+      {type: 'time', gridIndex: 1, axisTick: {show: false},
+       axisLine: {lineStyle: {color: '#e2dfd8'}},
+       axisLabel: {color: '#8a8f98', fontSize: 10, hideOverlap: true}, splitLine: {show: false}}
+    ],
+    yAxis: [
+      {gridIndex: 0, type: 'value', scale: true,
+       axisLabel: {color: '#8a8f98', fontSize: 11, formatter: v => v + 'bp'},
+       splitLine: {lineStyle: {color: '#f0eee9', type: 'dotted'}}},
+      {gridIndex: 0, type: 'value', scale: true,
+       axisLabel: {color: '#8a8f98', fontSize: 11, formatter: v => v.toFixed(0)},
+       splitLine: {show: false}},
+      {gridIndex: 1, type: 'value', scale: true,
+       axisLabel: {color: '#8a8f98', fontSize: 10, formatter: v => v + '%'},
+       splitLine: {lineStyle: {color: '#f0eee9', type: 'dotted'}}}
+    ],
+    dataZoom: [
+      {type: 'inside', xAxisIndex: [0, 1], start: s0, end: e0,
+       zoomOnMouseWheel: true, moveOnMouseMove: true, moveOnMouseWheel: false},
+      {type: 'slider', xAxisIndex: [0, 1], start: s0, end: e0,
+       bottom: 6, height: 16, borderColor: 'transparent',
+       backgroundColor: '#f4f2ee', fillerColor: 'rgba(232,131,58,.10)',
+       handleStyle: {color: '#fff', borderColor: '#d9d5cd'},
+       dataBackground: {lineStyle: {color: '#c9c5bd'}, areaStyle: {color: '#eeeeea'}},
+       textStyle: {color: '#9aa0a6', fontSize: 10}}
+    ],
+    series: [
+      // 区间背景单独成一个 series，方便在图例里独立开关（关掉 ERP 折线也仍可见）
+      {name: '区间背景', type: 'line', xAxisIndex: 0, yAxisIndex: 0, data: [],
+       color: '#8cc19a', showSymbol: false, silent: true, tooltip: {show: false},
+       lineStyle: {width: 0, opacity: 0}, itemStyle: {color: '#8cc19a'}, z: 0,
+       markArea: {silent: true, animation: false, data: zoneBands()}},
+      {name: CUR.name, type: 'line', xAxisIndex: 0, yAxisIndex: 1, data: pairs('close'),
+       showSymbol: false, lineStyle: {width: 1.2, color: '#a8a49c'},
+       itemStyle: {color: '#a8a49c'}, z: 2},
+      {name: 'ERP', type: 'line', xAxisIndex: 0, yAxisIndex: 0, data: pairs('erp_bp'),
+       showSymbol: false, lineStyle: {width: 2, color: '#e8833a'},
+       itemStyle: {color: '#e8833a'}, z: 3,
+       markLine: {
+         silent: true, symbol: 'none', animation: false,
+         lineStyle: {color: '#cfcac1', type: 'dashed', width: 1},
+         label: {color: '#a8a49c', fontSize: 11, position: 'insideStartTop',
+                 backgroundColor: 'rgba(255,255,255,.88)', padding: [2, 5], borderRadius: 2},
+         data: [
+           {yAxis: st.cheap, label: {formatter: st.cheap + 'bp 加仓线'}},
+           {yAxis: st.rich, label: {formatter: st.rich + 'bp 防守线'}}
+         ]
+       }},
+      {name: '指数收益率', type: 'line', xAxisIndex: 1, yAxisIndex: 2, data: pairs('ey'),
+       showSymbol: false, lineStyle: {width: 2, color: '#e8833a'},
+       itemStyle: {color: '#e8833a'}, z: 3},
+      {name: '无风险利率', type: 'line', xAxisIndex: 1, yAxisIndex: 2, data: pairs('y10'),
+       showSymbol: false, lineStyle: {width: 2, color: '#7d9db5'},
+       itemStyle: {color: '#7d9db5'}, z: 2}
+    ]
+  });
+
+  // 图例项（ERP / 指数名 / 区间背景）已在上面配置，切换指数时由 setChartSeries 更新
+
+  document.querySelectorAll('.ranges button').forEach(btn => {
+    btn.addEventListener('click', () => applyRange(Number(btn.dataset.years), btn));
+  });
+  chart.getZr().on('dblclick', () => {
+    applyRange(5, document.querySelector('.ranges button[data-years="5"]'));
+  });
+  window.addEventListener('resize', () => chart.resize());
+}
+
+document.getElementById('conf-pct').textContent = DATA.confirm_ey_pct;
+renderTabs();
+renderStatic();
+renderTable();
+renderWindow('5');
+try {
+  initChart();
+} catch (e) {
+  document.getElementById('chart').innerHTML =
+    '<div style="padding:64px 24px;text-align:center;color:#b04a3a;font-size:13px;line-height:1.9">'
+    + '图表未能加载：' + e.message
+    + '<br>请确认 <b>echarts.min.js</b> 与 <b>index.html</b> 在同一目录（web/）下。'
+    + '</div>';
+}
+</script>
+</body>
+</html>

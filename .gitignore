@@ -1,0 +1,15 @@
+# 环境与密钥
+.env
+
+# Python
+__pycache__/
+*.pyc
+
+# 缓存与 IDE 产物（含本机用户名路径）
+cache/
+.trae-html-share-packages/
+
+# 生成物
+reports/
+
+.DS_Store
