@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>杠杆资金观测</title>
+<style>
+  :root{
+    --orange:#e8833a; --ink:#1f2328;
+    --muted:#6b7280; --line:#e8e6e1; --bg:#f7f6f3; --card:#ffffff;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1320px; margin:0 auto; padding:20px 24px 40px}
+  .layout{display:flex; gap:16px; align-items:flex-start}
+  .sidebar{width:112px; flex-shrink:0; display:flex; flex-direction:column; gap:8px; padding-top:4px; position:sticky; top:16px}
+  .sidebar a{display:block; text-align:center; text-decoration:none; border:1px solid var(--line); background:#fff; color:var(--muted);
+             padding:11px 6px; border-radius:10px; font-size:13px; line-height:1.3; transition:.15s}
+  .sidebar a:hover{border-color:#c9c4ba; color:var(--ink)}
+  .sidebar a.on{background:var(--ink); border-color:var(--ink); color:#fff}
+  .main{flex:1; min-width:0}
+  header{display:flex; justify-content:space-between; align-items:flex-end; gap:16px; flex-wrap:wrap; margin-bottom:12px}
+  h1{margin:0; font-size:23px; letter-spacing:.5px}
+  h1 .accent{color:var(--orange)}
+  .sub{margin:5px 0 0; color:var(--muted); font-size:12.5px}
+  .chip{display:inline-block; padding:2px 9px; border-radius:999px; background:#fff;
+        border:1px solid var(--line); color:var(--muted); font-size:11.5px; margin-left:8px}
+  .updated{color:var(--muted); font-size:11.5px; text-align:right; line-height:1.5}
+  .cards{display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin-bottom:14px}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px; min-width:0}
+  .card .k{font-size:11.5px; color:var(--muted); letter-spacing:.3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .card .v{font-size:25px; font-weight:600; margin-top:6px; line-height:1.1; font-variant-numeric:tabular-nums}
+  .card .d{font-size:11px; color:var(--muted); margin-top:5px; line-height:1.4}
+  .card.verdict .v{font-size:20px}
+  .panel{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px 8px; margin-bottom:14px}
+  .toolbar{display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:2px}
+  .ranges{display:flex; gap:5px}
+  .ranges button{border:1px solid var(--line); background:#fff; color:var(--muted); cursor:pointer;
+                 padding:5px 12px; border-radius:7px; font-size:12.5px; transition:.15s}
+  .ranges button:hover{border-color:#d9d5cd; color:var(--ink)}
+  .ranges button.on{background:var(--ink); border-color:var(--ink); color:#fff}
+  .hint{color:#9aa0a6; font-size:11.5px}
+  #lev-chart{height:560px; width:100%}
+  h2{font-size:13.5px; margin:6px 4px 10px; color:var(--muted); font-weight:500; letter-spacing:.5px}
+  table{width:100%; border-collapse:collapse; font-size:13px; font-variant-numeric:tabular-nums}
+  th,td{padding:8px; text-align:right; border-bottom:1px solid #f2f0ec}
+  th{color:var(--muted); font-weight:500; font-size:12px}
+  th:first-child,td:first-child{text-align:left}
+  tbody tr:hover{background:#fbfaf8}
+  .pill{display:inline-block; padding:2px 10px; border-radius:999px; font-size:12px; border:1px solid transparent; white-space:nowrap}
+  footer{margin-top:18px; color:#9aa0a6; font-size:11.5px; line-height:1.9}
+  footer b{color:var(--muted); font-weight:500}
+  footer .rule{display:block; padding-left:14px}
+  @media (max-width:1080px){ .cards{grid-template-columns:repeat(3,1fr)} }
+  @media (max-width:760px){
+    .layout{flex-direction:column}
+    .sidebar{width:100%; flex-direction:row; position:static}
+    .sidebar a{flex:1}
+    .cards{grid-template-columns:repeat(2,1fr)}
+    .wrap{padding:16px 12px 32px}
+    #lev-chart{height:460px}
+    .hint{display:none}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="layout">
+    <aside class="sidebar">
+      <a href="./portal.html">首页</a>
+      <a href="./index.html">股债<br>性价比</a>
+      <a href="./turnover.html">两市<br>成交额</a>
+      <a href="./leverage.html" class="on">杠杆<br>资金</a>
+    </aside>
+
+    <div class="main">
+      <header>
+        <div>
+          <h1>杠杆<span class="accent">资金</span></h1>
+          <p class="sub">
+            融资余额 ÷ A股流通市值（存量）· 融资买入额 ÷ 成交额（流量）· 数据截止 <b id="asof">—</b>
+            <span class="chip">每周六 10:00 自动更新</span>
+          </p>
+        </div>
+        <div class="updated">最近生成<br><span id="updated">—</span></div>
+      </header>
+
+      <section class="cards">
+        <div class="card">
+          <div class="k">融资余额</div>
+          <div class="v" id="lv-balance">—</div>
+          <div class="d" id="lv-balance-d">—</div>
+        </div>
+        <div class="card" id="lv-ratio-card">
+          <div class="k">杠杆率</div>
+          <div class="v" id="lv-ratio">—</div>
+          <div class="d" id="lv-ratio-d">—</div>
+        </div>
+        <div class="card verdict" id="lv-band-card">
+          <div class="k">杠杆位置（长期区间）</div>
+          <div class="v" id="lv-band">—</div>
+          <div class="d" id="lv-band-d">—</div>
+        </div>
+        <div class="card">
+          <div class="k">融资买入占比（5 日）</div>
+          <div class="v" id="lv-buy">—</div>
+          <div class="d" id="lv-buy-d">—</div>
+        </div>
+        <div class="card">
+          <div class="k">融资买入分位（2014 以来）</div>
+          <div class="v" id="lv-buy-pct">—</div>
+          <div class="d" id="lv-buy-pct-d">—</div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="toolbar">
+          <div class="ranges" id="lv-ranges">
+            <button data-years="1">1 年</button>
+            <button data-years="3" class="on">3 年</button>
+            <button data-years="5">5 年</button>
+            <button data-years="10">10 年</button>
+            <button data-years="0">全部</button>
+          </div>
+          <div class="hint">上：杠杆率（左轴）＋ 融资余额（右轴，万亿）· 下：融资买入占比 · 底色为 2% / 3% / 4% 长期区间 · 数据截至 <b id="lv-asof">—</b></div>
+        </div>
+        <div id="lev-chart"></div>
+      </section>
+
+      <section class="panel">
+        <h2>近 12 周杠杆台账</h2>
+        <table>
+          <thead>
+            <tr><th>日期</th><th>融资余额（亿）</th><th>杠杆率</th><th>区间</th><th>融资买入占比（5 日）</th></tr>
+          </thead>
+          <tbody id="lv-log-body"></tbody>
+        </table>
+      </section>
+
+      <footer>
+        <b>杠杆率：</b>融资余额 ÷ A股流通市值 × 100%，是存量口径。总市值含大量暂不流通股份，会稀释杠杆率；
+        融资盘能买的只有流通股，所以用流通市值做分母，才能跨年份比较，也才和 2% / 3% / 4% 的长期经验区间对齐。<br>
+        <b>融资买入占比：</b>近 5 个交易日融资买入额合计 ÷ 同 5 日成交额合计 × 100%，是流量口径，
+        对情绪边际变化更敏感。<br>
+        <b>杠杆档位：</b>
+        <span class="rule">① &lt;2.0% 冰点：杠杆资金大量离场，情绪极度悲观，历史级别底部区域往往对应这一区间；</span>
+        <span class="rule">② 2.0–3.0% 中性：震荡磨底，机会集中在局部，整体风险可控；</span>
+        <span class="rule">③ 3.0–4.0% 活跃：杠杆资金明显活跃，局部过热风险上升；</span>
+        <span class="rule">④ ≥4.0% 过热：历史级别杠杆过热区，风险大于机会。</span>
+        <b>杠杆口径：</b>融资余额、融资买入额、A股流通市值均为沪深两市日频合计（北交所未计入），
+        来源为东方财富融资融券历史合计；两融数据通常比行情晚 1 个交易日，数据截止日单独标注。<br>
+        <b>怎么配合看：</b>「两市成交额」看交易有多拥挤，本页看仓位加到了多满。两者同向（高换手 + 高杠杆）风险更实在；
+        背离（高换手 + 低杠杆）更接近情绪脉冲。杠杆档位是风险刻度，不是买卖信号。<br>
+        <b>数据：</b>东方财富融资融券日频、中证全指日频成交额。本页仅为个人监测工具，不构成投资建议。
+      </footer>
+    </div>
+  </div>
+</div>
+
+<script src="./echarts.min.js"></script>
+<script>
+const DATA = __DATA__;
+
+const fmt = (v, d) => (v === null || v === undefined || isNaN(v)) ? '—' : Number(v).toFixed(d);
+const signed = (v, d, unit) => (v > 0 ? '+' : '') + fmt(v, d) + (unit || '');
+const UP = '#c0392b';   // 走高 = 更热（暖色）
+const DOWN = '#3b6ea5'; // 走低 = 更冷（冷色）
+
+let levChart = null;
+let levYears = 3;
+
+const levPairs = (key) => DATA.series.dates.map((d, i) => [d, DATA.series[key][i]]);
+
+function levBand(v) {
+  return DATA.bands.find(b => v < b.max) || DATA.bands[DATA.bands.length - 1];
+}
+
+function yearsAgoStartFor(dates, years) {
+  const n = dates.length;
+  if (!years) return [0, 100];
+  const end = new Date(dates[n - 1]).getTime();
+  const start = end - years * 365.25 * 864e5;
+  let i = 0;
+  while (i < n && new Date(dates[i]).getTime() < start) i++;
+  return [Math.max(0, i / Math.max(1, n - 1) * 100), 100];
+}
+
+function renderStatic() {
+  document.getElementById('asof').textContent = DATA.asof;
+  document.getElementById('updated').textContent = DATA.updated;
+  document.getElementById('lv-asof').textContent = DATA.asof;
+}
+
+function renderLeverage() {
+  const s = DATA.stats;
+
+  document.getElementById('lv-balance').textContent = fmt(s.balance_wan, 2) + ' 万亿';
+  const bc = Math.abs(s.balance_chg_pct) < 0.05 ? 0 : s.balance_chg_pct;
+  document.getElementById('lv-balance-d').innerHTML =
+    '较上周 <b style="color:' + (bc > 0 ? UP : bc < 0 ? DOWN : '#6b7280') + '">'
+    + signed(bc, 1, '%') + '</b>　流通市值 ' + fmt(s.circ_wan, 1) + ' 万亿';
+
+  document.getElementById('lv-ratio').textContent = fmt(s.ratio, 2) + '%';
+  document.getElementById('lv-ratio').style.color = s.color;
+  const rc = Math.abs(s.ratio_chg) < 0.005 ? 0 : s.ratio_chg;
+  document.getElementById('lv-ratio-d').innerHTML =
+    '较上周 <b style="color:' + (rc > 0 ? UP : rc < 0 ? DOWN : '#6b7280') + '">'
+    + signed(rc, 2, 'pp') + '</b>　2014以来分位 ' + fmt(s.ratio_pct, 1) + '%';
+
+  const ratioCard = document.getElementById('lv-ratio-card');
+  ratioCard.style.background = s.bg;
+  ratioCard.style.borderColor = s.border;
+
+  const bandCard = document.getElementById('lv-band-card');
+  bandCard.style.background = s.bg;
+  bandCard.style.borderColor = s.border;
+  const bv = document.getElementById('lv-band');
+  bv.textContent = s.band;
+  bv.style.color = s.color;
+  document.getElementById('lv-band-d').textContent = s.band_range + ' · ' + s.band_note;
+
+  document.getElementById('lv-buy').textContent = fmt(s.buy_share, 2) + '%';
+  const bch = Math.abs(s.buy_share_chg) < 0.005 ? 0 : s.buy_share_chg;
+  document.getElementById('lv-buy-d').innerHTML =
+    '较上周 <b style="color:' + (bch > 0 ? UP : bch < 0 ? DOWN : '#6b7280') + '">'
+    + signed(bch, 2, 'pp') + '</b>　5 日合计口径';
+
+  document.getElementById('lv-buy-pct').textContent = fmt(s.buy_share_pct, 1) + '%';
+  document.getElementById('lv-buy-pct-d').textContent = '低于当前值的交易日占比 · 2014 以来';
+}
+
+function renderLevTable() {
+  const body = document.getElementById('lv-log-body');
+  body.innerHTML = '';
+  DATA.log.slice().reverse().forEach(r => {
+    const b = levBand(r.ratio);
+    const pill = `<span class="pill" style="background:${b.color}14;color:${b.color};border-color:${b.color}40">${r.band}</span>`;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${r.date}</td><td>${fmt(r.balance, 0)}</td>`
+      + `<td>${fmt(r.ratio, 2)}%</td><td>${pill}</td><td>${fmt(r.buy_share, 2)}%</td>`;
+    body.appendChild(tr);
+  });
+}
+
+function levTooltip(ps) {
+  const i = ps[0].dataIndex, s = DATA.series;
+  const b = levBand(s.ratio[i]);
+  return `<div style="font-weight:600;margin-bottom:6px">${s.dates[i]}</div>`
+    + `<div>杠杆率　　<b style="color:#c0392b">${fmt(s.ratio[i], 2)}%</b>`
+    + ` <span style="color:${b.color}">${b.label}</span></div>`
+    + `<div>融资余额　<b>${fmt(s.balance[i] / 10000, 2)} 万亿</b></div>`
+    + `<div>融资买入　<b style="color:#3b6ea5">${fmt(s.buy_share[i], 2)}%</b>`
+    + `<span style="color:#9aa0a6">　20日均 ${fmt(s.buy_ma20[i], 2)}%</span></div>`
+    + `<div>流通市值　${fmt(s.circ[i], 1)} 万亿</div>`;
+}
+
+function applyLevRange(years, btn) {
+  levYears = years;
+  const [a, b] = yearsAgoStartFor(DATA.series.dates, years);
+  levChart.dispatchAction({type: 'dataZoom', dataZoomIndex: 0, start: a, end: b});
+  levChart.dispatchAction({type: 'dataZoom', dataZoomIndex: 1, start: a, end: b});
+  if (btn) {
+    document.querySelectorAll('#lv-ranges button').forEach(x => x.classList.remove('on'));
+    btn.classList.add('on');
+  }
+}
+
+function initLevChart() {
+  if (typeof echarts === 'undefined') throw new Error('echarts.min.js 未加载');
+  levChart = echarts.init(document.getElementById('lev-chart'), null, {renderer: 'canvas'});
+  const [s0, e0] = yearsAgoStartFor(DATA.series.dates, levYears);
+  const st = DATA.stats;
+
+  // 按长期区间给杠杆率面板铺底色
+  const areas = [];
+  let lo = 0;
+  DATA.bands.forEach(b => {
+    const hi = Math.min(b.max, st.ymax);
+    if (hi > lo) {
+      areas.push([
+        {yAxis: lo, itemStyle: {color: b.color + '10'}},
+        {yAxis: hi}
+      ]);
+    }
+    lo = b.max;
+  });
+
+  levChart.setOption({
+    animation: false,
+    axisPointer: {link: [{xAxisIndex: 'all'}], lineStyle: {color: '#c9c5bd', type: 'dashed'}},
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: 'rgba(255,255,255,.97)',
+      borderColor: '#e8e6e1',
+      textStyle: {color: '#1f2328', fontSize: 12},
+      formatter: levTooltip
+    },
+    legend: {
+      data: ['杠杆率', '融资余额', '融资买入占比', '融资买入20日均'],
+      top: 4, left: 0, icon: 'roundRect', itemWidth: 14, itemHeight: 3,
+      textStyle: {color: '#6b7280', fontSize: 12}
+    },
+    toolbox: {right: 6, top: 0, feature: {saveAsImage: {title: '导出图片', pixelRatio: 2}}},
+    grid: [
+      {left: 64, right: 82, top: 42, height: '44%'},
+      {left: 64, right: 82, top: '64%', height: '17%'}
+    ],
+    xAxis: [
+      {type: 'time', gridIndex: 0, axisTick: {show: false},
+       axisLine: {lineStyle: {color: '#e2dfd8'}},
+       axisLabel: {show: false}, splitLine: {show: false}},
+      {type: 'time', gridIndex: 1, axisTick: {show: false},
+       axisLine: {lineStyle: {color: '#e2dfd8'}},
+       axisLabel: {color: '#8a8f98', fontSize: 10, hideOverlap: true}, splitLine: {show: false}}
+    ],
+    yAxis: [
+      {gridIndex: 0, type: 'value', position: 'left', min: 0, max: st.ymax,
+       axisLabel: {color: '#8a8f98', fontSize: 11, formatter: v => v + '%'},
+       splitLine: {lineStyle: {color: '#f0eee9', type: 'dotted'}}},
+      {gridIndex: 0, type: 'value', position: 'right', scale: true,
+       axisLabel: {color: '#b08a5a', fontSize: 11, formatter: v => v.toFixed(1) + '万亿'},
+       splitLine: {show: false}},
+      {gridIndex: 1, type: 'value', position: 'left', scale: true, splitNumber: 3,
+       axisLabel: {color: '#3b6ea5', fontSize: 11, hideOverlap: true, formatter: v => v + '%'},
+       splitLine: {lineStyle: {color: '#f0eee9', type: 'dotted'}}}
+    ],
+    dataZoom: [
+      {type: 'inside', xAxisIndex: [0, 1], start: s0, end: e0,
+       zoomOnMouseWheel: true, moveOnMouseMove: true, moveOnMouseWheel: false},
+      {type: 'slider', xAxisIndex: [0, 1], start: s0, end: e0,
+       bottom: 4, height: 16, borderColor: 'transparent',
+       backgroundColor: '#f4f2ee', fillerColor: 'rgba(192,57,43,.08)',
+       handleStyle: {color: '#fff', borderColor: '#d9d5cd'},
+       dataBackground: {lineStyle: {color: '#c9c5bd'}, areaStyle: {color: '#eeeeea'}},
+       textStyle: {color: '#9aa0a6', fontSize: 10}}
+    ],
+    series: [
+      {name: '杠杆率', type: 'line', xAxisIndex: 0, yAxisIndex: 0,
+       data: levPairs('ratio'), showSymbol: false,
+       lineStyle: {width: 2.2, color: '#c0392b'}, itemStyle: {color: '#c0392b'}, z: 3,
+       markArea: {silent: true, animation: false, data: areas},
+       markLine: {
+         silent: true, symbol: 'none', animation: false,
+         lineStyle: {color: '#d6d1c8', type: 'dashed', width: 1},
+         label: {color: '#a8a49c', fontSize: 11, position: 'insideStartTop',
+                 backgroundColor: 'rgba(255,255,255,.85)', padding: [1, 4], borderRadius: 2},
+         data: DATA.bands.slice(0, -1).map(b => ({yAxis: b.max, label: {formatter: b.max + '%'}}))
+       }},
+      {name: '融资余额', type: 'line', xAxisIndex: 0, yAxisIndex: 1,
+       data: DATA.series.dates.map((d, i) => [d, DATA.series.balance[i] / 10000]),
+       showSymbol: false, lineStyle: {width: 1.4, color: '#c9a06a'},
+       itemStyle: {color: '#c9a06a'}, areaStyle: {color: 'rgba(201,160,106,.10)'}, z: 1},
+      {name: '融资买入占比', type: 'line', xAxisIndex: 1, yAxisIndex: 2,
+       data: levPairs('buy_share'), showSymbol: false,
+       lineStyle: {width: 1.6, color: '#3b6ea5', opacity: .9},
+       itemStyle: {color: '#3b6ea5'}, z: 2},
+      {name: '融资买入20日均', type: 'line', xAxisIndex: 1, yAxisIndex: 2,
+       data: levPairs('buy_ma20'), showSymbol: false,
+       lineStyle: {width: 1.2, color: '#9aa0a6', type: 'dashed'},
+       itemStyle: {color: '#9aa0a6'}, z: 1}
+    ]
+  });
+
+  document.querySelectorAll('#lv-ranges button').forEach(btn => {
+    btn.addEventListener('click', () => applyLevRange(Number(btn.dataset.years), btn));
+  });
+  levChart.getZr().on('dblclick', () => {
+    applyLevRange(3, document.querySelector('#lv-ranges button[data-years="3"]'));
+  });
+  window.addEventListener('resize', () => levChart.resize());
+}
+
+renderStatic();
+renderLeverage();
+renderLevTable();
+try {
+  initLevChart();
+} catch (e) {
+  document.getElementById('lev-chart').innerHTML =
+    '<div style="padding:64px 24px;text-align:center;color:#b04a3a;font-size:13px;line-height:1.9">'
+    + '图表未能加载：' + e.message
+    + '<br>请确认 <b>echarts.min.js</b> 与 <b>leverage.html</b> 在同一目录（web/）下。'
+    + '</div>';
+}
+</script>
+</body>
+</html>

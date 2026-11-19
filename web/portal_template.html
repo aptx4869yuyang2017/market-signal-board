@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Invest · 股债性价比监控</title>
+<style>
+  :root{
+    --orange:#e8833a; --ink:#1f2328; --muted:#6b7280; --line:#e8e6e1;
+    --bg:#f7f6f3; --card:#ffffff; --soft:#fbfaf7;
+    --green:#1b7f4b; --green2:#5aa469; --blue:#2f6f9f; --amber:#c8971b; --red:#c0392b;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased; line-height:1.6;
+  }
+  a{color:inherit}
+  .wrap{max-width:1180px; margin:0 auto; padding:22px 24px 48px}
+
+  .topbar{display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:26px}
+  .brand{display:flex; align-items:center; gap:10px; font-weight:600; letter-spacing:.3px}
+  .mark{
+    width:30px; height:30px; border-radius:9px; background:var(--ink); color:#fff;
+    display:grid; place-items:center; font-size:13px; letter-spacing:.5px;
+  }
+  .brand small{display:block; font-weight:400; color:var(--muted); font-size:11.5px; letter-spacing:0}
+  .nav{display:flex; gap:6px; flex-wrap:wrap}
+  .nav a{
+    text-decoration:none; border:1px solid var(--line); background:#fff; color:var(--muted);
+    padding:6px 15px; border-radius:999px; font-size:13px; transition:.15s;
+  }
+  .nav a:hover{border-color:#c9c4ba; color:var(--ink)}
+  .nav a.on{background:var(--ink); border-color:var(--ink); color:#fff}
+
+  .hero{
+    background:linear-gradient(150deg,#ffffff 0%,#fdfbf7 60%,#f7f1e8 100%);
+    border:1px solid var(--line); border-radius:18px; padding:30px 30px 26px; margin-bottom:18px;
+  }
+  .hero .eyebrow{font-size:12px; color:var(--muted); letter-spacing:1.6px; text-transform:uppercase; margin:0 0 10px}
+  h1{margin:0; font-size:30px; letter-spacing:.5px; line-height:1.28}
+  h1 .accent{color:var(--orange)}
+  .lede{margin:10px 0 0; color:var(--muted); font-size:14px; max-width:720px}
+  .meta{display:flex; gap:8px; flex-wrap:wrap; margin-top:16px}
+  .chip{
+    display:inline-flex; align-items:center; gap:6px; padding:4px 11px; border-radius:999px;
+    background:#fff; border:1px solid var(--line); color:var(--muted); font-size:11.5px;
+  }
+  .dot{width:6px; height:6px; border-radius:50%; background:var(--orange); display:inline-block}
+
+  .signal{
+    display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+    margin-top:22px; padding:16px 18px; border-radius:14px;
+  }
+  .signal .big{font-size:26px; font-weight:650; letter-spacing:.3px}
+  .signal .tag{
+    font-size:12px; font-weight:600; color:#fff;
+    padding:3px 10px; border-radius:999px;
+  }
+  .signal .txt{font-size:13px; flex:1; min-width:220px}
+
+  .grid{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:26px}
+  .card{
+    position:relative; display:block; text-decoration:none; background:var(--card);
+    border:1px solid var(--line); border-radius:16px; padding:20px 20px 18px;
+    transition:.18s; overflow:hidden;
+  }
+  .card:hover{transform:translateY(-2px); box-shadow:0 10px 26px -18px rgba(31,35,40,.45); border-color:#d6d1c7}
+  .card .kicker{font-size:12px; color:var(--muted); letter-spacing:.6px}
+  .card .value{margin:8px 0 2px; font-size:31px; font-weight:650; letter-spacing:.2px}
+  .card .value span{font-size:14px; font-weight:500; color:var(--muted); margin-left:4px}
+  .delta{font-size:12.5px; font-variant-numeric:tabular-nums}
+  .up{color:var(--green)} .down{color:var(--red)}
+  .badge{
+    display:inline-block; font-size:11.5px; padding:2px 9px; border-radius:999px; font-weight:600;
+    margin:10px 0 8px;
+  }
+  .card p{margin:0; font-size:12.5px; color:var(--muted); line-height:1.65}
+  .bar{height:5px; border-radius:99px; background:#eeece7; margin-top:14px; position:relative; overflow:hidden}
+  .bar i{position:absolute; left:0; top:0; bottom:0; border-radius:99px; display:block}
+  .barlabel{display:flex; justify-content:space-between; font-size:10.5px; color:#9aa1aa; margin-top:6px}
+  .go{position:absolute; right:18px; top:18px; color:#c2bcb0; font-size:15px; transition:.18s}
+  .card:hover .go{color:var(--ink); transform:translate(2px,-2px)}
+
+  .panel{background:var(--card); border:1px solid var(--line); border-radius:16px; padding:20px 20px 8px; margin-bottom:22px}
+  .panel h2{margin:0 0 4px; font-size:15px; letter-spacing:.4px}
+  .panel .hint{margin:0 0 14px; font-size:12px; color:var(--muted)}
+  table{width:100%; border-collapse:collapse; font-size:13px}
+  th{
+    text-align:right; font-weight:500; color:var(--muted); font-size:11.5px;
+    padding:8px 10px; border-bottom:1px solid var(--line); white-space:nowrap;
+  }
+  th:first-child, td:first-child{text-align:left}
+  td{padding:11px 10px; border-bottom:1px solid #f1efea; text-align:right; font-variant-numeric:tabular-nums}
+  tr:last-child td{border-bottom:none}
+  .name{font-weight:520}
+  .sub{color:var(--muted); font-size:11px; margin-left:6px}
+  .pill{font-size:11px; padding:2px 8px; border-radius:999px; font-weight:600; white-space:nowrap}
+
+  footer{border-top:1px solid var(--line); padding-top:18px; color:var(--muted); font-size:11.5px; line-height:1.8}
+  footer b{color:#4b5157; font-weight:600}
+
+  @media (max-width:900px){
+    .grid{grid-template-columns:1fr}
+    .wrap{padding:18px 16px 36px}
+    .hero{padding:24px 20px}
+    h1{font-size:24px}
+    .signal .big{font-size:22px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <div class="brand">
+      <div class="mark">AI</div>
+      <div>AI Invest<small>股债性价比 · 每日监控</small></div>
+    </div>
+    <nav class="nav">
+      <a href="./portal.html" class="on">首页</a>
+      <a href="./index.html">股债性价比</a>
+      <a href="./turnover.html">两市成交额</a>
+      <a href="./leverage.html">杠杆资金</a>
+    </nav>
+  </div>
+
+  <section class="hero">
+    <p class="eyebrow">Equity Risk Premium Monitor</p>
+    <h1>股债<span class="accent">性价比</span>监控</h1>
+    <p class="lede">用 ERP、两市成交额与杠杆资金三个维度，看当前股票相对债券贵不贵、市场交投冷不冷、杠杆水位高不高。所有指标都在 Python 侧算好，页面只做展示。</p>
+    <div class="meta">
+      <span class="chip"><span class="dot"></span>数据截至 {{ASOF}}</span>
+      <span class="chip">更新于 {{UPDATED}}</span>
+      <span class="chip">每交易日 08:30 自动更新</span>
+      <span class="chip">全指数口径：中证全指 000985</span>
+    </div>
+
+    <div class="signal" style="background:{{ERP_BG}}; border:1px solid {{ERP_BORDER}}">
+      <span class="big">ERP {{ERP_BP}}bp</span>
+      <span class="tag" style="background:{{ERP_COLOR}}">{{ERP_TIER}}</span>
+      <span class="txt" style="color:{{ERP_COLOR}}">{{ERP_SIGNAL_TEXT}}</span>
+    </div>
+  </section>
+
+  <div class="grid">
+    <a class="card" href="./index.html">
+      <span class="go">↗</span>
+      <div class="kicker">股债性价比</div>
+      <div class="value">{{ERP_BP}}<span>bp</span></div>
+      <div class="delta {{ERP_CHG_CLASS}}">本周 {{ERP_CHG}}bp</div>
+      <span class="badge" style="color:{{ERP_COLOR}}; background:{{ERP_BG}}; border:1px solid {{ERP_BORDER}}">{{ERP_TIER}}</span>
+      <p>股权收益率 {{ERP_EY}}% ＝ 无风险利率 {{ERP_Y10}}% ＋ 风险溢价 {{ERP_PREMIUM}}%。10 年分位 {{ERP_PCT10}}%，5 年分位 {{ERP_PCT5}}%。</p>
+      <div class="bar"><i style="width:{{ERP_PCT10}}%; background:{{ERP_COLOR}}"></i></div>
+      <div class="barlabel"><span>便宜 0%</span><span>10 年分位 {{ERP_PCT10}}%</span><span>100%</span></div>
+    </a>
+
+    <a class="card" href="./turnover.html">
+      <span class="go">↗</span>
+      <div class="kicker">两市成交额</div>
+      <div class="value">{{TO_AMT}}<span>万亿 / 日均</span></div>
+      <div class="delta {{TO_CHG_CLASS}}">较上周 {{TO_CHG}}%</div>
+      <span class="badge" style="color:{{TO_COLOR}}; background:{{TO_BG}}; border:1px solid {{TO_BORDER}}">{{TO_TIER}}</span>
+      <p>本周换手率 {{TO_WEEK_TURN}}%，分位 {{TO_TURN_PCT}}%（冷热阈值 {{TO_COLD}}% / {{TO_HOT}}%）。{{TO_NOTE}}。</p>
+      <div class="bar"><i style="width:{{TO_TURN_PCT}}%; background:{{TO_COLOR}}"></i></div>
+      <div class="barlabel"><span>冷 0%</span><span>换手率分位 {{TO_TURN_PCT}}%</span><span>100% 热</span></div>
+    </a>
+
+    <a class="card" href="./leverage.html">
+      <span class="go">↗</span>
+      <div class="kicker">杠杆资金</div>
+      <div class="value">{{LV_BALANCE}}<span>万亿</span></div>
+      <div class="delta {{LV_CHG_CLASS}}">杠杆率 {{LV_RATIO_CHG}}pct</div>
+      <span class="badge" style="color:{{LV_COLOR}}; background:{{LV_BG}}; border:1px solid {{LV_BORDER}}">{{LV_BAND}}</span>
+      <p>融资余额 {{LV_BALANCE_RAW}} 亿，占流通市值 {{LV_RATIO}}%，处于 {{LV_RANGE}} {{LV_BAND}}区间；分位 {{LV_RATIO_PCT}}%。{{LV_NOTE}}。</p>
+      <div class="bar"><i style="width:{{LV_RATIO_PCT}}%; background:{{LV_COLOR}}"></i></div>
+      <div class="barlabel"><span>低 0%</span><span>杠杆率分位 {{LV_RATIO_PCT}}%</span><span>100% 高</span></div>
+    </a>
+  </div>
+
+  <section class="panel">
+    <h2>指数横向对比</h2>
+    <p class="hint">各指数只看分位、不看 ERP 绝对值；分位为 10 年窗口的 ERP 便宜度分位，越低越便宜。</p>
+    <table>
+      <thead>
+        <tr>
+          <th>指数</th>
+          <th>ERP</th>
+          <th>周变化</th>
+          <th>10 年分位</th>
+          <th>5 年分位</th>
+          <th>档位</th>
+        </tr>
+      </thead>
+      <tbody>
+{{INDEX_ROWS}}
+      </tbody>
+    </table>
+  </section>
+
+  <footer>
+    <p><b>口径</b>：ERP ＝ 指数收益率（1/PE）− 10 年期国债收益率，单位 bp，442bp 即 4.42%；分位＝窗口内「比当前更便宜」的天数占比，越低越便宜。成交额分位方向相反，越高越热。</p>
+    <p><b>数据源</b>：中证指数官网、中债登（经 akshare）、东方财富融资融券历史合计；免费源无 SLA，杠杆数据 T+1，仅适合个人监控，不对外披露。</p>
+    <p><b>免责声明</b>：单一指标不能替代仓位管理与风险预算，本页内容仅供个人研究记录，不构成任何投资建议。</p>
+  </footer>
+
+</div>
+</body>
+</html>

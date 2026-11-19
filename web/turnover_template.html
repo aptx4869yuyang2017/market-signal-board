@@ -71,8 +71,10 @@
 <div class="wrap">
   <div class="layout">
     <aside class="sidebar">
+      <a href="./portal.html">首页</a>
       <a href="./index.html">股债<br>性价比</a>
       <a href="./turnover.html" class="on">两市<br>成交额</a>
+      <a href="./leverage.html">杠杆<br>资金</a>
     </aside>
 
     <div class="main">
@@ -89,12 +91,12 @@
 
       <section class="cards">
         <div class="card">
-          <div class="k">本周日均换手率</div>
+          <div class="k">本周换手率</div>
           <div class="v" id="k-turn">—</div>
           <div class="d" id="k-turn-d">—</div>
         </div>
         <div class="card" id="k-turn-pct-card">
-          <div class="k">日均换手率分位（924 以来）</div>
+          <div class="k">本周换手率分位（924 以来）</div>
           <div class="v" id="k-turn-pct">—</div>
           <div class="d" id="k-turn-pct-d">—</div>
         </div>
@@ -104,12 +106,12 @@
           <div class="d" id="k-verdict-d">—</div>
         </div>
         <div class="card">
-          <div class="k">本周日均成交额</div>
+          <div class="k">本周成交额（日均）</div>
           <div class="v" id="k-amount">—</div>
           <div class="d" id="k-amount-d">—</div>
         </div>
         <div class="card" id="k-amount-pct-card">
-          <div class="k">本周日均成交额百分位（924 以来）</div>
+          <div class="k">本周成交额分位（924 以来）</div>
           <div class="v" id="k-amount-pct">—</div>
           <div class="d" id="k-amount-pct-d">—</div>
         </div>
@@ -124,7 +126,7 @@
             <button data-years="10">10 年</button>
             <button data-years="0">全部</button>
           </div>
-          <div class="hint">图表区间 · 分位固定按 2024-09-24 以来计算 · 左轴换手率 / 右轴成交额 · 中证全指辅助 · 虚线为 924 以来 20% / 80% 分位</div>
+          <div class="hint">图表区间 · 周度换手率分位固定按 2024-09-24 以来计算 · 左轴换手率 / 右轴成交额 · 中证全指辅助 · 虚线为 924 以来周度 20% / 80% 分位</div>
         </div>
         <div id="chart"></div>
       </section>
@@ -133,7 +135,7 @@
         <h2 id="table-title">近 12 周台账</h2>
         <table>
           <thead>
-            <tr><th>日期</th><th>周日均成交额（亿）</th><th>周日均换手率</th><th>924以来分位</th><th>信号</th></tr>
+            <tr><th>日期</th><th>日均成交额（亿）</th><th>周度换手率</th><th>924以来分位</th><th>信号</th></tr>
           </thead>
           <tbody id="log-body"></tbody>
         </table>
@@ -141,23 +143,26 @@
 
       <footer>
         <b>为什么要标准化：</b>总市值会随上市数量与股价上涨而扩张，成交额也会被动抬升，直接看绝对值（或它的历史分位）会系统性偏高。
-        用 <b>换手率 = 成交额 ÷ 沪深两市总市值</b> 剔除市值膨胀后，再比较历史分位，才能跨年份判断交易冷热。
+        用 <b>周度换手率 = 5 日成交额合计 ÷ 5 日总市值合计</b> 剔除市值膨胀后，再比较历史分位，才能跨年份判断交易冷热。
         本页分母用两市「市价总值」（总市值口径）；若换成自由流通市值，读数会更高、波动也更大，但冷热排序基本一致。<br>
         <b>为什么分位从 924 起算：</b>2024-09-24 政策转向后，两市成交额从 0.5–1 万亿的平台系统性抬升到 1.5–3.5 万亿。
         924 之前成交额中位数约 <b>0.62 万亿</b>、换手率约 <b>0.98%</b>；924 之后中位数约 <b>1.88 万亿</b>、换手率约 <b>1.88%</b>。
         两个平台的量级不同，混在一起算分位会让当前读数被旧平台带偏，所以<b>所有分位（卡片、阈值线、台账）统一只用 2024-09-24 之后的样本</b>；
         图上仍保留更早历史，便于观察这次平台跃迁。<br>
-        <b>卡片口径：</b>「本周日均」= 最近 5 个交易日的算术平均；对应分位 = 924 以来滚动 5 日均序列中低于当前值的占比，
-        用均值替代单日可降低噪声，更贴合周度观察节奏。<br>
+        <b>卡片口径：</b>「本周」= 最近 5 个交易日；<b>周度换手率 = 5 日成交额合计 ÷ 5 日总市值合计</b>，
+        用合计相除可以抵消市值波动的影响。「本周成交额（日均）」= 5 日成交额合计 ÷ 5。
+        对应分位 = 924 以来各周（以每周最后一个交易日为锚点）的周度换手率中低于当前值的占比。<br>
         <b>口径：</b>成交额、指数点位取中证全指（000985）日频数据；两市总市值取沪深交易所月度市价总值，月内按中证全指涨跌衔接、月末用官方值校准。
-        分位 = 924 以来样本中「低于当前值」的交易日占比，<b>越高越热</b>（与 ERP 分位方向相反）。<br>
+        分位 = 924 以来样本中「低于当前值」的周数占比，<b>越高越热</b>（与 ERP 分位方向相反）。<br>
         <b>档位：</b>
-        <span class="rule">① 日均换手率分位 ≤20% 冷清（20–40 偏冷、40–60 正常、60–80 偏热、&gt;80 过热）；</span>
-        <span class="rule">② 图中两条水平虚线是 924 以来 20% / 80% 分位对应的换手率水平，跌破 20% 线偏冷、站上 80% 线偏热；</span>
-        <span class="rule">③ 冷暖底色仅标记 924 之后：换手率低于 20% 分位铺浅蓝（冷）、高于 80% 分位铺浅红（热），可在图例里独立开关；</span>
-        <span class="rule">④ 竖虚线标出 2024-09-24 政策转向；「成交额百分位」只作参考，它没有剔除市值增长，判断冷热以换手率分位为准。</span>
+        <span class="rule">① 周度换手率分位 ≤20% 冷清（20–40 偏冷、40–60 正常、60–80 偏热、&gt;80 过热）；</span>
+        <span class="rule">② 图中两条水平虚线是 924 以来周度 20% / 80% 分位对应的换手率水平，日换手率跌破 20% 线偏冷、站上 80% 线偏热；</span>
+        <span class="rule">③ 冷暖底色仅标记 924 之后：日换手率低于周度 20% 分位铺浅蓝（冷）、高于周度 80% 分位铺浅红（热），可在图例里独立开关；</span>
+        <span class="rule">④ 竖虚线标出 2024-09-24 政策转向；「成交额分位」只作参考，它没有剔除市值增长，判断冷热以周度换手率分位为准。</span>
         <b>配色：</b>换手率分位、综合判断两张卡片随档位变色（蓝 = 冷、黄 = 正常、橙红 = 热）；
-        成交额与换手率的「较上周」上涨用暖色、下跌用冷色，只表示冷热方向，不表示好坏。
+        成交额与换手率的「较上周」上涨用暖色、下跌用冷色，只表示冷热方向，不表示好坏。<br>
+        <b>杠杆维度：</b>融资余额 ÷ 流通市值、融资买入占比等仓位指标已独立到「杠杆资金」页：
+        本页回答「交易有多拥挤」，杠杆页回答「仓位加到了多满」。<br>
         <b>数据：</b>中证指数官网、沪深交易所月度市价总值。本页仅为个人监测工具，不构成投资建议。
       </footer>
     </div>
@@ -194,15 +199,15 @@ function renderStatic() {
   document.getElementById('asof').textContent = DATA.asof;
   document.getElementById('updated').textContent = DATA.updated;
 
-  // 本周日均换手率（最近 5 个交易日均值）
+  // 本周换手率（5 日成交额合计 ÷ 5 日总市值合计）
   document.getElementById('k-turn').textContent = fmt(st.week_turn, 2) + '%';
   const tc = Math.abs(st.turn_chg) < 0.005 ? 0 : st.turn_chg;
   document.getElementById('k-turn-d').innerHTML =
     '较上周 <b style="color:' + (tc > 0 ? UP : tc < 0 ? DOWN : '#6b7280') + '">'
     + signed(tc, 2, 'pp') + '</b>'
-    + '　市值 ' + fmt(st.cap_wan, 1) + ' 万亿';
+    + '　周均市值 ' + fmt(st.cap_wan, 1) + ' 万亿';
 
-  // 本周日均成交额
+  // 本周成交额（5 日均）
   document.getElementById('k-amount').textContent = fmt(st.week_amount, 0) + ' 亿';
   const ac = Math.abs(st.amount_chg_pct) < 0.05 ? 0 : st.amount_chg_pct;
   document.getElementById('k-amount-d').innerHTML =
@@ -224,12 +229,12 @@ function toneCard(id, pct) {
 
 function renderRegime() {
   const w = DATA.regime;
-  const span = ' · 样本 ' + w.start + ' 起（' + w.days + ' 个交易日）';
+  const span = ' · 样本 ' + w.start + ' 起（' + w.weeks + ' 周）';
   document.getElementById('k-turn-pct').textContent = fmt(w.turn_pct, 1) + '%';
-  document.getElementById('k-turn-pct-d').textContent = '低于当前均值的交易日占比' + span;
+  document.getElementById('k-turn-pct-d').textContent = '低于当前周度换手率的周数占比' + span;
 
   document.getElementById('k-amount-pct').textContent = fmt(w.amount_pct, 1) + '%';
-  document.getElementById('k-amount-pct-d').textContent = '未剔除市值增长' + span;
+  document.getElementById('k-amount-pct-d').textContent = '按日均口径 · 未剔除市值增长' + span;
 
   toneCard('k-turn-pct-card', w.turn_pct);
   toneCard('k-amount-pct-card', w.amount_pct);
@@ -256,14 +261,18 @@ function renderTable() {
   });
 }
 
-function yearsAgoStart(years) {
-  const d = DATA.series.dates, n = d.length;
+function yearsAgoStartFor(dates, years) {
+  const d = dates, n = d.length;
   if (!years) return [0, 100];
   const end = new Date(d[n - 1]).getTime();
   const start = end - years * 365.25 * 864e5;
   let i = 0;
   while (i < n && new Date(d[i]).getTime() < start) i++;
   return [Math.max(0, i / Math.max(1, n - 1) * 100), 100];
+}
+
+function yearsAgoStart(years) {
+  return yearsAgoStartFor(DATA.series.dates, years);
 }
 
 function applyRange(years, btn) {
@@ -289,7 +298,7 @@ function tooltipHtml(ps) {
     + `<div>两市总市值 ${fmt(s.cap[i], 1)} 万亿</div>`;
 }
 
-// 冷暖背景：仅 924 之后，换手率低于 20% 分位 → 冷（浅蓝），高于 80% 分位 → 热（浅红）
+// 冷暖背景：仅 924 之后，日换手率低于周度 20% 分位 → 冷（浅蓝），高于周度 80% 分位 → 热（浅红）
 function zoneBands() {
   const d = DATA.series.dates, v = DATA.series.turn, st = DATA.stats;
   const startTs = new Date(DATA.regime.start).getTime();
@@ -391,8 +400,8 @@ function initChart() {
          label: {color: '#a8a49c', fontSize: 11, position: 'insideStartTop',
                  backgroundColor: 'rgba(255,255,255,.88)', padding: [2, 5], borderRadius: 2},
          data: [
-           {yAxis: st.hot, label: {formatter: '924以来 80% 分位 ' + st.hot + '%'}},
-           {yAxis: st.cold, label: {formatter: '924以来 20% 分位 ' + st.cold + '%'}},
+           {yAxis: st.hot, label: {formatter: '924以来周度 80% 分位 ' + st.hot + '%'}},
+           {yAxis: st.cold, label: {formatter: '924以来周度 20% 分位 ' + st.cold + '%'}},
            {xAxis: new Date(DATA.regime.start).getTime(),
             lineStyle: {color: '#b9b3a8', type: 'dotted', width: 1},
             label: {formatter: '924 政策转向', position: 'insideEndTop', rotate: 0}}
@@ -416,6 +425,7 @@ function initChart() {
   window.addEventListener('resize', () => chart.resize());
 }
 
+
 renderStatic();
 renderTable();
 renderRegime();
@@ -428,6 +438,7 @@ try {
     + '<br>请确认 <b>echarts.min.js</b> 与 <b>turnover.html</b> 在同一目录（web/）下。'
     + '</div>';
 }
+
 </script>
 </body>
 </html>
