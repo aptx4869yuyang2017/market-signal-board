@@ -171,7 +171,7 @@ push:
 计划任务「AI Invest 每日数据更新与部署」每天 08:30（Asia/Shanghai）触发，执行 `bash daily_update.sh`：
 
 1. 抓数并重算三张页面与门户首页；
-2. 把 `data/`、`web/` 的变更提交到 git（不自动 push）；
+2. 把 `data/`、`web/`、`memory/` 的变更提交到 git（不自动 push）；
 3. 推送一条飞书日报；
 4. 重新部署到 https://37kpkjj3lvulefh33ap.traesite.cn 。
 
@@ -195,7 +195,19 @@ data/                     原始序列与周度台账
 reports/                  每周周报与走势图
 web/                      交互页面（*_template.html 是模板，portal.html / index.html / turnover.html / leverage.html 是生成物）
 analysis/                 一次性分析脚本（利率归因、口径对比）
+memory/                   跨 agent 共用的本地记忆（随仓库提交，见下节）
 ```
+
+## 本地记忆（跨 agent 共享）
+
+固定路径：**`memory/`**（项目根目录）。随仓库提交，换机器、换 agent 都能接着用。
+
+- 所有 agent（Trae / WorkBuddy / Claude Code / Codex 等）都读写这一处，不要另建带工具名的目录（如 `.workbuddy/`、`.claude/`）。
+- 一天一个文件：`memory/YYYY-MM-DD.md`，当天追加，不改写历史日期。
+- 适合记录：数据源探查结论、口径取舍、失败尝试、待办与遗留问题。
+- 不要写入：密钥、账号、大段原始日志、可再生成的数据。
+- 新会话先读最近 1–3 天的文件；结论被推翻时，在当天文件写清原因，而不是删旧记录。
+- 修改记忆后随当次改动一起提交，避免本地与仓库长期分叉。
 
 ## 边界
 

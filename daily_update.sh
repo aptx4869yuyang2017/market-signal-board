@@ -13,8 +13,8 @@ PY="/opt/homebrew/anaconda3/bin/python3"
 echo "[1/5] 抓数并重算页面 $(date '+%F %T')"
 "$PY" monitor.py
 
-echo "[2/5] 提交数据与页面"
-git add data web
+echo "[2/5] 提交数据、页面与记忆"
+git add data web memory
 if ! git diff --cached --quiet; then
   git commit -m "chore: 每日数据更新 $(date '+%F')"
 fi
