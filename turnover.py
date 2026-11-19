@@ -14,6 +14,7 @@
 
 用法：
     python turnover.py                 # 抓数 + 计算 + 生成 web/turnover.html
+                                       # 并调用 leverage.py 生成 web/leverage.html
     python turnover.py --no-fetch      # 只用本地缓存
     python turnover.py --quiet
 """
@@ -170,32 +171,50 @@ def pick_tier(pct: float, tiers: list[dict]) -> dict:
     return next(t for t in tiers if pct <= t["max"])
 
 
-def weekly_rows(df: pd.DataFrame, cfg: dict) -> list[dict]:
-    """近 N 周台账：用「周日均」（当周 5 个交易日均值）替代单日快照，排除特殊日期影响。
+WEEK_N = 5
 
-    周日均 = 滚动 5 个交易日均值（以当周最后一个交易日为锚点）；
-    分位 = 924 以来滚动 5 日均序列中低于当前值的占比。
+
+def week_metrics(df: pd.DataFrame) -> pd.DataFrame:
+    """逐日计算滚动周度指标。
+
+    一周 = 最近 5 个交易日；
+    周度换手率 = 5 日成交额合计 ÷ 5 日总市值合计 × 100；
+    amount / cap 为对应的 5 日均值。
     """
-    week_n = 5
-    d = df.copy().sort_values("date").reset_index(drop=True)
-    d["amount_ma5"] = d["amount"].rolling(week_n).mean()
-    d["turn_ma5"] = d["turn"].rolling(week_n).mean()
+    d = df.sort_values("date").reset_index(drop=True).copy()
+    d["amount_sum"] = d["amount"].rolling(WEEK_N, min_periods=WEEK_N).sum()
+    d["cap_sum"] = d["cap"].rolling(WEEK_N, min_periods=WEEK_N).sum()
+    d["turn"] = d["amount_sum"] / d["cap_sum"] * 100.0
+    d["amount"] = d["amount_sum"] / WEEK_N
+    d["cap"] = d["cap_sum"] / WEEK_N
+    return d
+
+
+def weekly_rows(df: pd.DataFrame, cfg: dict) -> list[dict]:
+    """近 N 周台账：每行取当周最后一个交易日的滚动周度指标。
+
+    周度换手率 = 最近 5 个交易日成交额合计 ÷ 同 5 个交易日总市值合计；
+    amount 为同期日均成交额；
+    分位 = 924 以来各周周度换手率中低于（或等于）当前值的占比。
+    """
+    d = week_metrics(df)
     d["week"] = d["date"].dt.to_period("W-FRI")
+    ends = d.groupby("week").tail(1).dropna(subset=["turn"])
 
     start = pd.Timestamp(cfg["turnover"]["pct_start"])
-    # 924 以来的滚动 5 日均序列，作为分位的可比样本
-    ma = d.loc[(d["date"] >= start) & d["turn_ma5"].notna()].reset_index(drop=True)
-    turn_ma5 = ma["turn_ma5"].to_numpy()
+    sample = ends.loc[ends["date"] >= start]
+    if sample.empty:
+        sample = ends
+    turn_sample = sample["turn"].to_numpy()
 
-    rows = d.groupby("week").tail(1).tail(cfg["turnover"]["recent_weeks"])
-    rows = rows.dropna(subset=["amount_ma5", "turn_ma5"])
+    rows = ends.tail(cfg["turnover"]["recent_weeks"])
     out = []
     for r in rows.itertuples():
-        p = float((turn_ma5 <= r.turn_ma5).mean() * 100)
+        p = float((turn_sample <= r.turn).mean() * 100)
         out.append({
             "date": f"{r.date:%Y-%m-%d}",
-            "amount": round(float(r.amount_ma5), 1),
-            "turn": round(float(r.turn_ma5), 2),
+            "amount": round(float(r.amount), 1),
+            "turn": round(float(r.turn), 2),
             "pct": round(p, 1),
             "tier": pick_tier(p, cfg["turnover"]["tiers"])["label"],
         })
@@ -207,9 +226,13 @@ def weekly_rows(df: pd.DataFrame, cfg: dict) -> list[dict]:
 # --------------------------------------------------------------------------- #
 def make_payload(df: pd.DataFrame, cfg: dict) -> dict:
     last = df.iloc[-1]
-    prev = df.loc[df["date"] <= last["date"] - pd.Timedelta(days=7)]
-    amount_chg = ((last["amount"] / prev["amount"].iloc[-1] - 1) * 100) if not prev.empty else 0.0
-    turn_chg = (last["turn"] - prev["turn"].iloc[-1]) if not prev.empty else 0.0
+    d = week_metrics(df)
+    d["week"] = d["date"].dt.to_period("W-FRI")
+    ends = d.groupby("week").tail(1).dropna(subset=["turn"])
+    cur = ends.iloc[-1]
+    prev = ends.iloc[-2] if len(ends) > 1 else None
+    amount_chg = ((cur["amount"] / prev["amount"] - 1) * 100) if prev is not None else 0.0
+    turn_chg = (cur["turn"] - prev["turn"]) if prev is not None else 0.0
 
     # 分位固定用 2024-09-24（924 政策转向）之后的样本。
     # 924 之后两市成交额从 0.5–1 万亿抬升到 1.5–3.5 万亿的平台，
@@ -218,30 +241,28 @@ def make_payload(df: pd.DataFrame, cfg: dict) -> dict:
     sample = df.loc[df["date"] >= start].reset_index(drop=True)
     if len(sample) < 30:
         raise RuntimeError(f"924 以来样本不足（{len(sample)} 个交易日）")
+    week_sample = ends.loc[ends["date"] >= start]
+    if len(week_sample) < 4:
+        raise RuntimeError(f"924 以来周样本不足（{len(week_sample)} 周）")
 
-    # 本周日均（最近 5 个交易日）
-    week_n = 5
-    week_tail = df.tail(week_n)
-    week_amount = float(week_tail["amount"].mean())
-    week_turn = float(week_tail["turn"].mean())
+    # 本周 = 最近 5 个交易日；周度换手率 = 5 日成交额合计 ÷ 5 日总市值合计
+    week_amount = float(cur["amount"])
+    week_turn = float(cur["turn"])
 
-    # 在 924 样本内用滚动 5 日均构建可比序列，再算本周日均的分位
-    s = sample.copy()
-    s["amount_ma5"] = s["amount"].rolling(week_n).mean()
-    s["turn_ma5"] = s["turn"].rolling(week_n).mean()
-    s = s.dropna(subset=["amount_ma5", "turn_ma5"])
-    week_amount_pct = float((s["amount_ma5"] <= week_amount).mean() * 100)
-    week_turn_pct = float((s["turn_ma5"] <= week_turn).mean() * 100)
+    # 在 924 以来的周度序列里算分位
+    week_amount_pct = float((week_sample["amount"] <= week_amount).mean() * 100)
+    week_turn_pct = float((week_sample["turn"] <= week_turn).mean() * 100)
 
     # 单日分位（保留作参考）
     daily_amount_pct = pct_rank(sample, "amount")
     daily_turn_pct = pct_rank(sample, "turn")
 
-    # 综合判断跟随「日均换手率分位」
+    # 综合判断跟随「周度换手率分位」
     tier = pick_tier(week_turn_pct, cfg["turnover"]["tiers"])
     regime = {
         "start": f"{start:%Y-%m-%d}",
         "days": int(len(sample)),
+        "weeks": int(len(week_sample)),
         "turn_pct": round(week_turn_pct, 1),
         "amount_pct": round(week_amount_pct, 1),
         "daily_turn_pct": round(daily_turn_pct, 1),
@@ -261,16 +282,16 @@ def make_payload(df: pd.DataFrame, cfg: dict) -> dict:
             "amount_chg_pct": round(float(amount_chg), 1),
             "turn": round(float(last["turn"]), 2),
             "turn_chg": round(float(turn_chg), 2),
-            "cap_wan": round(float(last["cap"]) / 10000, 1),
+            "cap_wan": round(float(cur["cap"]) / 10000, 1),
             "close": round(float(last["close"]), 2),
-            # 本周日均（卡片主口径）
+            # 本周（5 日均成交额 / 周度换手率）
             "week_amount": round(week_amount, 1),
             "week_amount_pct": round(week_amount_pct, 1),
             "week_turn": round(week_turn, 2),
             "week_turn_pct": round(week_turn_pct, 1),
-            # 冷热阈值线同样取 924 以来样本的 20% / 80% 分位
-            "cold": round(float(sample["turn"].quantile(0.20)), 2),
-            "hot": round(float(sample["turn"].quantile(0.80)), 2),
+            # 冷热阈值线取 924 以来周度换手率的 20% / 80% 分位
+            "cold": round(float(week_sample["turn"].quantile(0.20)), 2),
+            "hot": round(float(week_sample["turn"].quantile(0.80)), 2),
         },
         "regime": regime,
         "series": {
@@ -294,26 +315,28 @@ def summary_md(payload: dict) -> str:
     """周报 / 推送用的成交额摘要（Markdown，飞书卡片可直接渲染）。"""
     st, rg = payload["stats"], payload["regime"]
     badge = TIER_BADGE.get(rg["tier"], "")
+    da, dt = st.get("amount_chg_pct"), st.get("turn_chg")
 
-    wow = ""
-    log = payload.get("log") or []
-    if len(log) >= 2:
-        prev, cur = log[-2], log[-1]
-        da = (cur["amount"] / prev["amount"] - 1) * 100 if prev["amount"] else 0.0
-        dt = cur["turn"] - prev["turn"]
-        wow = f"较上周日均：成交额 {da:+.1f}%｜换手率 {dt:+.2f}pct"
+    threshold_line = f'（冷/热阈值 {st["cold"]:.2f}% / {st["hot"]:.2f}%）'
+    if dt is not None:
+        bp = round(dt * 100)
+        txt = f"换手率 {bp:+d}bp" if bp else "换手率 0bp"
+        color = "orange" if bp > 0 else "blue" if bp < 0 else None
+        threshold_line += f" ｜<font color='{color}'>{txt}</font>" if color else f" ｜{txt}"
+    amount_pct_line = f'分位 {st["week_amount_pct"]:.1f}%'
+    if da is not None:
+        amount_pct_line += f' | 较上周 {da:+.1f}%'
 
     lines = [
-        "**两市成交额 · 换手率口径（成交额 ÷ 两市总市值）**",
+        "**两市成交额**",
         "",
-        f'{badge} **{rg["tier"]}** ｜ {rg["note"]}',
+        f'{badge} 成交量 {rg["tier"]} ｜ {rg["note"]}',
+        f'**本周换手率 {st["week_turn"]:.2f}%  分位 {st["week_turn_pct"]:.1f}%**',
+        threshold_line,
         "",
-        f'本周日均成交额 **{_amount_text(st["week_amount"])}**（924 以来分位 {st["week_amount_pct"]:.1f}%）',
-        f'日均换手率 **{st["week_turn"]:.2f}%**（924 以来分位 {st["week_turn_pct"]:.1f}%，'
-        f'冷/热阈值 {st["cold"]:.2f}% / {st["hot"]:.2f}%）',
+        f'本周成交额（日均） {_amount_text(st["week_amount"])}',
+        amount_pct_line,
     ]
-    if wow:
-        lines.append(wow)
     return "\n".join(lines)
 
 
@@ -344,16 +367,36 @@ def run(cfg: dict | None = None, no_fetch: bool = False, quiet: bool = False,
 
     df = build(daily, cap)
     payload = make_payload(df, cfg)
+
+    # 杠杆资金独立成页，抓取失败不影响成交额页
+    lv_payload = None
+    lv_path = None
+    try:
+        import leverage
+        lv_payload = leverage.run(df, cfg, no_fetch=no_fetch, quiet=True)
+        lv_path = leverage.render(lv_payload) if render_page else None
+    except Exception as exc:  # noqa: BLE001
+        if not quiet:
+            print(f"[杠杆] 跳过：{exc}", file=sys.stderr)
+
     path = render(payload) if render_page else None
 
     st = payload["stats"]
     if not quiet:
-        print(f'[成交额] {payload["asof"]} 本周日均成交额 {st["week_amount"]:.0f} 亿 | '
-              f'日均换手率 {st["week_turn"]:.2f}% | 924以来分位 {payload["regime"]["turn_pct"]:.1f}% | '
+        print(f'[成交额] {payload["asof"]} 本周成交额（日均） {st["week_amount"]:.0f} 亿 | '
+              f'本周换手率 {st["week_turn"]:.2f}% | 924以来分位 {payload["regime"]["turn_pct"]:.1f}% | '
               f'{payload["regime"]["tier"]}')
+        if lv_payload:
+            ls = lv_payload["stats"]
+            print(f'[杠杆] {lv_payload["asof"]} 融资余额 {ls["balance_wan"]:.2f} 万亿 | '
+                  f'杠杆率 {ls["ratio"]:.2f}% ({ls["band"]}) | '
+                  f'融资买入占比 {ls["buy_share"]:.2f}%')
         if path:
             print(f"网页: {path}")
-    return {"payload": payload, "path": path}
+        if lv_path:
+            print(f"杠杆页: {lv_path}")
+    return {"payload": payload, "path": path,
+            "leverage": lv_payload, "leverage_path": lv_path}
 
 
 def main() -> int:

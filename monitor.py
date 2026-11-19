@@ -141,6 +141,64 @@ def fetch_pe(cfg: dict, code: str, retries: int = 3) -> pd.DataFrame:
     raise RuntimeError(f"获取 {code} 数据失败: {last_err}")
 
 
+def fetch_pe_cyb50(cfg: dict, code: str = "399673", retries: int = 3) -> pd.DataFrame:
+    """创业板50（399673）日频 PE 推算。
+
+    该指数属国证/深证体系，中证 index-perf 无数据。乐咕乐股只给月频 PE 锚点，
+    腾讯日线给日频收盘价；两者收盘价同口径，故用
+        PE(t) = 月频PE(最近锚点) × 收盘价(t) / 收盘价(锚点日)
+    把月频 PE 插值为日频。锚点日推算值与原始月频 PE 完全一致（校验偏差 0）。
+    PE 口径为整体法静态市盈率（lyrPe），与中证 peg 字段口径接近。
+    """
+    import akshare as ak
+    import akshare.stock_feature.stock_a_pe_and_pb as lg_mod
+    from datetime import datetime as _dt
+
+    last_err = None
+    for i in range(retries):
+        try:
+            # 日频收盘价（腾讯源，避开东财限流）
+            px = ak.stock_zh_index_daily_tx(symbol=f"sz{code}")
+            px["date"] = pd.to_datetime(px["date"])
+            px = (px[["date", "close"]].drop_duplicates("date")
+                    .sort_values("date").reset_index(drop=True))
+
+            # 乐咕月频 PE 锚点（整体法静态市盈率 lyrPe）
+            js = lg_mod.py_mini_racer.MiniRacer()
+            js.eval(lg_mod.hash_code)
+            token = js.call("hex", _dt.now().date().isoformat()).lower()
+            resp = requests.get(
+                "https://legulegu.com/api/stockdata/index-basic-pe",
+                params={"token": token, "indexCode": f"{code}.SZ"},
+                **lg_mod.get_cookie_csrf(url="https://legulegu.com/stockdata/sz50-ttm-lyr"),
+                timeout=60,
+            )
+            resp.raise_for_status()
+            anchors = pd.DataFrame(resp.json()["data"])
+            anchors["date"] = pd.to_datetime(anchors["date"])
+            anchors = (anchors[["date", "close", "lyrPe"]]
+                       .rename(columns={"close": "anchor_close", "lyrPe": "anchor_pe"})
+                       .dropna(subset=["anchor_pe"])
+                       .sort_values("date").reset_index(drop=True))
+            if anchors.empty:
+                raise RuntimeError(f"{code} 乐咕 PE 锚点为空")
+
+            merged = pd.merge_asof(px, anchors, on="date", direction="backward")
+            merged["pe"] = merged["anchor_pe"] * merged["close"] / merged["anchor_close"]
+            df = (merged[["date", "close", "pe"]].dropna(subset=["pe"]))
+            df["pe"] = df["pe"].round(2)
+            start = pd.Timestamp(cfg["start_date"])
+            df = df[df["date"] >= start].sort_values("date").reset_index(drop=True)
+            if df.empty:
+                raise RuntimeError(f"{code} 推算结果为空")
+            return df
+        except Exception as exc:  # noqa: BLE001
+            last_err = exc
+            if i < retries - 1:
+                time.sleep(3 * (i + 1))
+    raise RuntimeError(f"获取 {code}（创业板50）数据失败: {last_err}")
+
+
 def fetch_bond(cfg: dict) -> pd.DataFrame:
     import akshare as ak  # 延迟导入，--no-fetch 时无需依赖
 
@@ -340,24 +398,19 @@ def render_report(info: dict, cfg: dict, name: str, path: Path,
     sign = ">" if ey_p10 > cfg["signal"]["confirm_ey_pct"] else "≤"
 
     confirm_emoji = "🟩" if info["double_confirm"] else "🟧"
-    y10_ytd = fmt_chg(info.get("y10_ytd_bp"))
-    md = f"""# 股债性价比 · {name} · {info["date"]:%G 年 W%V}
+    md = f"""**股债性价比**
 
-{badge} **{tier["label"]}** ｜ {info["verdict"]}
-
-ERP **{info["erp_bp"]:.0f}bp**（周 {fmt_chg(info["change_1w"])}）
-无风险利率 {info["y10"]:.2f}%（较年初 {y10_ytd}） ＋ 风险溢价 {info["erp_pct"]:.2f}% ＝ 股权收益率 {info["ey"]:.2f}%
-分位 {p5:.1f}% / {p10:.1f}%（5 年 / 10 年）
-
-判定：
 {badge} ERP 10 年分位 {p10:.1f}% ≤{tier["max"]}% → {tier["label"]}
 {confirm_emoji} 估值 10 年分位 {ey_p10:.1f}% {sign}{cfg["signal"]["confirm_ey_pct"]}% → {"双确认" if info["double_confirm"] else "单边"}
-
 {VERDICT_NOTE.get(info["verdict"], "")}
+
+**ERP {info["erp_bp"]:.0f}bp（周 {fmt_chg(info["change_1w"])}）**
+无风险利率 {info["y10"]:.2f}% ＋ 风险溢价 {info["erp_pct"]:.2f}% ＝ 股权收益率 {info["ey"]:.2f}%
+分位 {p5:.1f}% / {p10:.1f}%（5 年 / 10 年）
 """
     if turnover_md:
-        md += "\n" + turnover_md.strip() + "\n"
-    md += f'\n<sub>数据截至 {info["date"]:%m-%d}｜每周六 10:00 更新</sub>\n'
+        md += "\n***\n\n" + turnover_md.strip() + "\n"
+    md += f'\n数据截至 {info["date"]:%m-%d}｜每交易日 08:30 更新\n'
     path.write_text(md, encoding="utf-8")
     return md
 
@@ -469,18 +522,30 @@ def push_feishu(webhook: str, title: str, body: str) -> None:
         lines = lines[1:]
     emoji_color = {"🟩": "green", "🟢": "green", "🟨": "yellow", "🟧": "orange",
                    "🟥": "red", "🔵": "blue", "🟦": "blue"}
-    rendered = []
+    rendered: list[str] = []
+    elements: list[dict] = []
+
+    def flush() -> None:
+        if rendered:
+            text = "\n".join(rendered).replace("<sub>", "").replace("</sub>", "")
+            elements.append({"tag": "div", "text": {"tag": "lark_md", "content": text}})
+            rendered.clear()
+
     for ln in lines:
+        if ln.strip() == "***":  # 飞书不支持 *** 分割线，切成段落并插入原生 hr 元素
+            flush()
+            elements.append({"tag": "hr"})
+            continue
         if not ln.strip():
             continue
-        color = emoji_color.get(ln[0]) if ln else None
+        head = ln.lstrip("*")
+        color = emoji_color.get(head[0]) if head else None
         rendered.append(f"<font color='{color}'>{ln}</font>" if color else ln)
-    text = "\n".join(rendered)
-    text = text.replace("<sub>", "").replace("</sub>", "")
+    flush()
     card = {
         "config": {"wide_screen_mode": True},
         "header": {"title": {"tag": "plain_text", "content": title}, "template": "orange"},
-        "elements": [{"tag": "div", "text": {"tag": "lark_md", "content": text}}],
+        "elements": elements,
     }
     resp = requests.post(webhook, json={"msg_type": "interactive", "card": card}, timeout=15)
     resp.raise_for_status()
@@ -548,6 +613,9 @@ def main() -> int:
         try:
             if args.no_fetch:
                 pe = pd.read_csv(pe_file(code), parse_dates=["date"])
+            elif item.get("source") == "cyb50_lg":
+                pe = fetch_pe_cyb50(cfg, code)
+                pe.to_csv(pe_file(code), index=False, date_format="%Y-%m-%d")
             else:
                 pe = fetch_pe(cfg, code)
                 pe.to_csv(pe_file(code), index=False, date_format="%Y-%m-%d")
@@ -581,6 +649,8 @@ def main() -> int:
     turnover_payload = None
     turnover_path = None
     turnover_md = None
+    leverage_payload = None
+    leverage_path = None
     try:
         import turnover as turnover_mod
         try:
@@ -595,6 +665,8 @@ def main() -> int:
         turnover_payload = turnover_result["payload"]
         turnover_path = turnover_result["path"]
         turnover_md = turnover_mod.summary_md(turnover_payload)
+        leverage_payload = turnover_result.get("leverage")
+        leverage_path = turnover_result.get("leverage_path")
     except Exception as exc:  # noqa: BLE001
         print(f"[warn] 成交额数据生成失败: {exc}", file=sys.stderr)
 
@@ -613,6 +685,11 @@ def main() -> int:
                                   log, i["code"], i["name"])
                     for i in usable]
         web_path = render_web(payloads, cfg, log)
+        try:
+            import portal as portal_mod
+            portal_mod.build()
+        except Exception as exc:  # noqa: BLE001
+            print(f"[warn] 门户页生成失败: {exc}", file=sys.stderr)
 
     sent = [] if args.no_push else notify(cfg, info, primary["name"], md_path,
                                           turnover_payload=turnover_payload)
@@ -631,10 +708,16 @@ def main() -> int:
         if turnover_payload:
             tst = turnover_payload["stats"]
             trg = turnover_payload["regime"]
-            print(f'  两市场均成交 {tst["week_amount"]:.0f}亿 | 换手 {tst["week_turn"]:.2f}% | '
+            print(f'  两市成交额（日均） {tst["week_amount"]:.0f}亿 | 本周换手率 {tst["week_turn"]:.2f}% | '
                   f'924以来分位 {trg["turn_pct"]:.1f}% | {trg["tier"]}')
+            if leverage_payload:
+                ls = leverage_payload["stats"]
+                print(f'  杠杆率 {ls["ratio"]:.2f}% ({leverage_payload["asof"]}) | {ls["band"]} | '
+                      f'融资余额 {ls["balance_wan"]:.2f}万亿 | 融资买入占比 {ls["buy_share"]:.2f}%')
         if turnover_path:
             print(f"成交额页: {turnover_path}")
+        if leverage_path:
+            print(f"杠杆页: {leverage_path}")
         print(f"推送: {', '.join(sent) if sent else '关闭'}")
     return 0
 
