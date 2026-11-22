@@ -60,7 +60,7 @@
   }
   .signal .txt{font-size:13px; flex:1; min-width:220px}
 
-  .grid{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:26px}
+  .grid{display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:26px}
   .card{
     position:relative; display:block; text-decoration:none; background:var(--card);
     border:1px solid var(--line); border-radius:16px; padding:20px 20px 18px;
@@ -101,6 +101,7 @@
   footer{border-top:1px solid var(--line); padding-top:18px; color:var(--muted); font-size:11.5px; line-height:1.8}
   footer b{color:#4b5157; font-weight:600}
 
+  @media (max-width:1100px){ .grid{grid-template-columns:repeat(2,1fr)} }
   @media (max-width:900px){
     .grid{grid-template-columns:1fr}
     .wrap{padding:18px 16px 36px}
@@ -123,13 +124,14 @@
       <a href="./index.html">股债性价比</a>
       <a href="./turnover.html">两市成交额</a>
       <a href="./leverage.html">杠杆资金</a>
+      <a href="./sentiment.html">反向情绪</a>
     </nav>
   </div>
 
   <section class="hero">
     <p class="eyebrow">Equity Risk Premium Monitor</p>
     <h1>股债<span class="accent">性价比</span>监控</h1>
-    <p class="lede">用 ERP、两市成交额与杠杆资金三个维度，看当前股票相对债券贵不贵、市场交投冷不冷、杠杆水位高不高。所有指标都在 Python 侧算好，页面只做展示。</p>
+    <p class="lede">用 ERP、两市成交额、杠杆资金与反向情绪四个维度，看当前股票相对债券贵不贵、市场交投冷不冷、杠杆水位高不高、情绪离极值还有多远。所有指标都在 Python 侧算好，页面只做展示。</p>
     <div class="meta">
       <span class="chip"><span class="dot"></span>数据截至 {{ASOF}}</span>
       <span class="chip">更新于 {{UPDATED}}</span>
@@ -177,6 +179,17 @@
       <div class="bar"><i style="width:{{LV_RATIO_PCT}}%; background:{{LV_COLOR}}"></i></div>
       <div class="barlabel"><span>低 0%</span><span>杠杆率分位 {{LV_RATIO_PCT}}%</span><span>100% 高</span></div>
     </a>
+
+    <a class="card" href="./sentiment.html">
+      <span class="go">↗</span>
+      <div class="kicker">反向情绪</div>
+      <div class="value">{{SM_SCORE}}<span>/ 100 温度</span></div>
+      <div class="delta">越低越冷 · 基金现金 {{SM_FUND_CASH}}%</div>
+      <span class="badge" style="color:{{SM_COLOR}}; background:{{SM_BG}}; border:1px solid {{SM_BORDER}}">{{SM_TIER}}</span>
+      <p>融资余额 20 日 {{SM_MARGIN_CHG}}%（{{SM_MARGIN_TIER}}）· 新开户 {{SM_ACCOUNT}} 万户 · 北向成交 {{SM_NORTH_DEAL}} 亿。{{SM_NOTE}}。</p>
+      <div class="bar"><i style="width:{{SM_SCORE}}%; background:{{SM_COLOR}}"></i></div>
+      <div class="barlabel"><span>0 冰点</span><span>温度 {{SM_SCORE}}</span><span>100 过热</span></div>
+    </a>
   </div>
 
   <section class="panel">
@@ -201,7 +214,7 @@
 
   <footer>
     <p><b>口径</b>：ERP ＝ 指数收益率（1/PE）− 10 年期国债收益率，单位 bp，442bp 即 4.42%；分位＝窗口内「比当前更便宜」的天数占比，越低越便宜。成交额分位方向相反，越高越热。</p>
-    <p><b>数据源</b>：中证指数官网、中债登（经 akshare）、东方财富融资融券历史合计；免费源无 SLA，杠杆数据 T+1，仅适合个人监控，不对外披露。</p>
+    <p><b>数据源</b>：中证指数官网、中债登（经 akshare）、东方财富融资融券与沪深港通、上交所统计月报、天天基金 F10；免费源无 SLA，两融数据 T+1，仅适合个人监控，不对外披露。</p>
     <p><b>免责声明</b>：单一指标不能替代仓位管理与风险预算，本页内容仅供个人研究记录，不构成任何投资建议。</p>
   </footer>
 

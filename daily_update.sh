@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 每个交易日：抓数 → 重算三张看板与门户首页 → 提交 git → 重新部署到 traesite
+# 每个交易日：抓数 → 重算四张看板与门户首页 → 提交 git → 重新部署到 traesite
 # 用法：bash daily_update.sh（定时任务也是调它）
 set -euo pipefail
 
@@ -46,7 +46,7 @@ def link_fix(text: str) -> str:
 (out / "erp.html").write_text(
     link_fix((web / "index.html").read_text(encoding="utf-8")), encoding="utf-8"
 )
-for name in ("turnover.html", "leverage.html"):
+for name in ("turnover.html", "leverage.html", "sentiment.html"):
     (out / name).write_text(
         link_fix((web / name).read_text(encoding="utf-8")), encoding="utf-8"
     )
@@ -62,7 +62,7 @@ CLI="$SKILL_DIR/scripts/trae-deploy"
 echo "[4/5] 创建部署"
 result="$(sh "$CLI" deployments create --site-id "$SITE_ID" \
   --title "AI Invest 每日更新 $(date '+%F')" \
-  --description "每日更新：重新抓取指数 PE、10Y 国债收益率、两市成交额与融资融券数据，重算 ERP / 成交额 / 杠杆三张看板与门户首页后重新发布。" \
+  --description "每日更新：重新抓取指数 PE、10Y 国债收益率、两市成交额、融资融券与反向情绪数据，重算 ERP / 成交额 / 杠杆 / 反向情绪四张看板与门户首页后重新发布。" \
   --type static-web --source-dir "$src" --execution-config "$cfg" --app-tags 234)"
 dep_id="$(printf '%s' "$result" | "$PY" -c 'import json,sys; d=json.load(sys.stdin); print(d["data"]["deployment_id"] if d.get("ok") else "")')"
 [ -n "$dep_id" ] || { echo "$result" >&2; exit 1; }

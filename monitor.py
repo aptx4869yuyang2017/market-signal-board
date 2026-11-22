@@ -670,6 +670,24 @@ def main() -> int:
     except Exception as exc:  # noqa: BLE001
         print(f"[warn] 成交额数据生成失败: {exc}", file=sys.stderr)
 
+    # 反向情绪监控（独立数据源，失败不影响 ERP / 成交额主流程）
+    sentiment_payload = None
+    sentiment_path = None
+    try:
+        import sentiment as sentiment_mod
+        try:
+            sentiment_result = sentiment_mod.run(cfg, no_fetch=args.no_fetch, quiet=True,
+                                                 render_page=not args.no_web)
+        except Exception as exc:  # noqa: BLE001
+            if args.no_fetch:
+                raise
+            print(f"[warn] 反向情绪抓数失败，改用本地缓存: {exc}", file=sys.stderr)
+            sentiment_result = sentiment_mod.run(cfg, no_fetch=True, quiet=True,
+                                                 render_page=not args.no_web)
+        sentiment_payload, sentiment_path = sentiment_result
+    except Exception as exc:  # noqa: BLE001
+        print(f"[warn] 反向情绪数据生成失败: {exc}", file=sys.stderr)
+
     week = f'{info["date"]:%G-W%V}'
     md_path = REPORT_DIR / f"{week}.md"
     png_path = REPORT_DIR / f"{week}.png"
@@ -718,6 +736,15 @@ def main() -> int:
             print(f"成交额页: {turnover_path}")
         if leverage_path:
             print(f"杠杆页: {leverage_path}")
+        if sentiment_payload:
+            sp = sentiment_payload["stats"]
+            print(f'  反向情绪 温度 {sentiment_payload["composite"]["score"]:.1f} '
+                  f'({sentiment_payload["composite"]["tier"]}) | '
+                  f'基金现金 {sp["fund"]["cash"]:.2f}% | '
+                  f'融资20日 {sp["margin"]["chg20"]:+.2f}% ({sp["margin"]["tier"]}) | '
+                  f'开户 {sp["account"]["new_a"]:.1f}万户')
+        if sentiment_path:
+            print(f"反向情绪页: {sentiment_path}")
         print(f"推送: {', '.join(sent) if sent else '关闭'}")
     return 0
 

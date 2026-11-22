@@ -1,6 +1,6 @@
 """门户首页（web/portal.html）生成器。
 
-读取 index / turnover / leverage 三张页面里已注入的 DATA JSON，
+读取 index / turnover / leverage / sentiment 四张页面里已注入的 DATA JSON，
 填充 web/portal_template.html，输出 web/portal.html。
 
 用法：python portal.py
@@ -73,12 +73,16 @@ def build(web_dir: Path = WEB_DIR) -> Path:
     erp = load_payload(web_dir / "index.html")
     turnover = load_payload(web_dir / "turnover.html")
     leverage = load_payload(web_dir / "leverage.html")
+    sentiment = load_payload(web_dir / "sentiment.html")
 
     main = erp["indices"][0]
     st, w10, w5 = main["stats"], main["by_window"]["10"], main["by_window"]["5"]
 
     to_stats, to_regime = turnover["stats"], turnover["regime"]
     lv = leverage["stats"]
+    sm, sf, smg, sa, sn = (sentiment["composite"], sentiment["stats"]["fund"],
+                          sentiment["stats"]["margin"], sentiment["stats"]["account"],
+                          sentiment["stats"]["north"])
 
     values = {
         "ASOF": st["asof"],
@@ -127,6 +131,20 @@ def build(web_dir: Path = WEB_DIR) -> Path:
         "LV_COLOR": lv["color"],
         "LV_BG": lv["bg"],
         "LV_BORDER": lv["border"],
+        # 反向情绪
+        "SM_SCORE": _pct(sm["score"]),
+        "SM_TIER": sm["tier"],
+        "SM_COLOR": sm["color"],
+        "SM_BG": sm["bg"],
+        "SM_BORDER": sm["border"],
+        "SM_NOTE": sm["note"],
+        "SM_FUND_CASH": f'{sf["cash"]:.2f}',
+        "SM_FUND_PCT": _pct(sf["cash_pct"]),
+        "SM_MARGIN_CHG": _signed(smg["chg20"]),
+        "SM_MARGIN_TIER": smg["tier"],
+        "SM_ACCOUNT": f'{sa["new_a"]:.0f}',
+        "SM_ACCOUNT_PCT": _pct(sa["pct"]),
+        "SM_NORTH_DEAL": f'{sn["deal_ma20"]:.0f}',
         # 指数表
         "INDEX_ROWS": index_rows(erp["indices"]),
     }

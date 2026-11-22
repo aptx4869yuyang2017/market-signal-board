@@ -1,6 +1,6 @@
-# 股债性价比 · 周度监控（ERP + 两市成交额 + 杠杆资金）
+# 股债性价比 · 周度监控（ERP + 两市成交额 + 杠杆资金 + 反向情绪）
 
-每交易日 08:30 自动抓数、计算 ERP、两市成交额与杠杆资金，生成门户首页与三张交互页面、一份报告，推送一条飞书通知，并自动重新部署线上站点。
+每交易日 08:30 自动抓数、计算 ERP、两市成交额、杠杆资金与反向情绪，生成门户首页与四张交互页面、一份报告，推送一条飞书通知，并自动重新部署线上站点。
 
 **主口径：ERP = 中证全指收益率 − 10 年期国债收益率，单位 bp。** 442bp 即 4.42%。
 
@@ -13,6 +13,7 @@
 | 股债性价比页（`web/index.html`） | [`docs/pages/erp.md`](docs/pages/erp.md) |
 | 两市成交额页（`web/turnover.html`） | [`docs/pages/turnover.md`](docs/pages/turnover.md) |
 | 杠杆资金页（`web/leverage.html`） | [`docs/pages/leverage.md`](docs/pages/leverage.md) |
+| 反向情绪页（`web/sentiment.html`） | [`docs/pages/sentiment.md`](docs/pages/sentiment.md) |
 | 周报与飞书推送 | [`docs/pages/weekly-report.md`](docs/pages/weekly-report.md) |
 
 > **契约约定：一个页面对应一个 md 文件。**
@@ -26,7 +27,7 @@ cd "AI Invest"
 /opt/homebrew/anaconda3/bin/python3 monitor.py
 ```
 
-`monitor.py` 一次跑完主流程，内部会调用 `turnover.py` 生成成交额页，由 `leverage.py` 生成杠杆资金页，最后由 `portal.py` 汇总生成门户首页。
+`monitor.py` 一次跑完主流程，内部会调用 `turnover.py` 生成成交额页（它同时调用 `leverage.py` 生成杠杆资金页）、`sentiment.py` 生成反向情绪页，最后由 `portal.py` 汇总生成门户首页。
 
 每日更新（抓数 → 页面 → git 提交 → 重新部署）直接跑：
 
@@ -42,10 +43,16 @@ bash daily_update.sh
 | 交互页面（股债性价比） | `web/index.html` |
 | 交互页面（两市成交额） | `web/turnover.html` |
 | 交互页面（杠杆资金） | `web/leverage.html` |
+| 交互页面（反向情绪） | `web/sentiment.html` |
 | 周度台账 | `data/weekly_log.csv` |
 | 成交额日频序列 | `data/turnover_daily.csv` |
 | 两市总市值月度锚点 | `data/market_cap_monthly.csv` |
 | 杠杆日频（融资余额 / 买入额 / 流通市值） | `data/leverage_daily.csv` |
+| 基金现金季度样本（25 只主动权益） | `data/fund_cash_quarterly.csv` |
+| 基金股票仓位周度估算 | `data/fund_position_weekly.csv` |
+| A 股个人新开户月频 | `data/account_monthly.csv` |
+| 北向成交额日频（沪股通 + 深股通） | `data/northbound_daily.csv` |
+| 中证全指日频点位（四图辅助灰线，只读复用） | `data/turnover_daily.csv` |
 
 看页面：直接双击 `web/index.html`，或 `open "web/index.html"`。纯本地文件，断网可用（ECharts 已下载到 `web/echarts.min.js`）。
 
@@ -57,7 +64,8 @@ bash daily_update.sh
 | 生成 ERP 页 | `monitor.py` + `web/template.html` | `DATA` JSON 注入 → `web/index.html` |
 | 生成成交额页 | `turnover.py` + `web/turnover_template.html` | 成交额、月度市值 → `web/turnover.html` |
 | 生成杠杆页 | `leverage.py` + `web/leverage_template.html` | 两融日频、成交额日频 → `web/leverage.html` |
-| 生成门户首页 | `portal.py` + `web/portal_template.html` | 三张页面的 `DATA` → `web/portal.html` |
+| 生成反向情绪页 | `sentiment.py` + `web/sentiment_template.html` | 基金季报、两融日频、开户月报、北向成交额 → `web/sentiment.html` |
+| 生成门户首页 | `portal.py` + `web/portal_template.html` | 四张页面的 `DATA` → `web/portal.html` |
 | 周报 + 推送 | `monitor.py` | 上述结果 → `reports/<YYYY-Www>.md` / `.png` + 飞书 |
 
 设计上 **所有计算都在 Python 侧完成**，页面只负责展示、格式化与按档位上色。新增指标时先扩展 payload 契约，再写前端。
@@ -100,8 +108,14 @@ bash daily_update.sh
 | 两市成交额 | 中证全指（000985）日频成交额 | 日 | T+0 ~ T+1 |
 | 两市总市值 | 沪深交易所月度市价总值锚点，月内按指数涨跌衔接 | 月 | 官方值校准 |
 | 融资余额 / 融资买入额 / 流通市值 | 东方财富融资融券历史合计（`RPTA_RZRQ_LSHJ`） | 日 | T+1 |
+| 基金现金占净值比（25 只样本） | 天天基金 F10 资产配置明细（基金定期报告） | 季 | 季末后约 15 个工作日 |
+| 基金股票仓位（全样本估算） | 乐咕 `fund_stock_position_lg` | 周 | 周度 |
+| A 股个人新开户 | 上交所上证统计月报 `COMMON_SSE_TZZ_M_STOCK_ACCT_C` | 月 | 次月上旬 |
+| 北向成交总额 | 东方财富 `RPT_MUTUAL_DEAL_HISTORY`（001 + 003） | 日 | T+0 ~ T+1 |
 
 免费源、无需 token，历史自 2014 起。官网接口无 SLA，脚本内置 3 次重试 + 本地 CSV 缓存，断网也能用上次数据出报告（`--no-fetch`）。
+
+**北向资金口径提醒**：2024-08-19 起交易所不再披露北向每日净买入/净卖出，反向情绪页只跟踪沪股通 + 深股通成交总额作为**活跃度代理**，不提供也不估算净流向；第三方软件上的「实时北向流入」不可与本页混用。温度计算对北向做去趋势：用「20 日均额 ÷ 250 日均额」的相对活跃度取分位（`config.yaml.sentiment.north_trend_days` 控制均线天数），避免成交额长期增长让分位长期贴在 80+；图上画的仍是绝对成交额。
 
 支持的指数：
 
@@ -130,6 +144,7 @@ bash daily_update.sh
 
 单独重算成交额页：`python turnover.py`（会同时生成杠杆页，可加 `--no-fetch`）。
 只重算杠杆页：`python leverage.py`（可加 `--no-fetch`）。
+只重算反向情绪页：`python sentiment.py`（可加 `--no-fetch`，季度基金样本抓取约需 30 秒）。
 
 ### 改阈值
 
@@ -145,6 +160,10 @@ turnover:
 leverage:
   start: "2014-01-01"
   bands: [...]          # 杠杆率绝对区间（2% / 3% / 4%）
+sentiment:
+  fund_codes: [...]     # 25 只主动权益基金
+  margin_tiers: [...]   # 融资余额 20 日变化档位（−8% / −4% / +2%）
+  score_tiers: [...]    # 市场温度档位（0 冰点 → 100 过热）
 ```
 
 ### 推送配置（飞书）
@@ -170,7 +189,7 @@ push:
 
 计划任务「AI Invest 每日数据更新与部署」每天 08:30（Asia/Shanghai）触发，执行 `bash daily_update.sh`：
 
-1. 抓数并重算三张页面与门户首页；
+1. 抓数并重算四张页面与门户首页；
 2. 把 `data/`、`web/`、`memory/` 的变更提交到 git（不自动 push）；
 3. 推送一条飞书日报；
 4. 重新部署到 https://37kpkjj3lvulefh33ap.traesite.cn 。
@@ -184,16 +203,18 @@ README.md                 项目总览、共享口径、文档索引
 docs/pages/erp.md         股债性价比页契约（web/index.html）
 docs/pages/turnover.md    两市成交额页契约（web/turnover.html）
 docs/pages/leverage.md    杠杆资金页契约（web/leverage.html）
+docs/pages/sentiment.md   反向情绪页契约（web/sentiment.html）
 docs/pages/weekly-report.md  周报与飞书推送契约
 config.yaml               参数：指数、阈值、成交额档位、杠杆档位、推送
 monitor.py                主脚本（抓数 → 计算 → 报告 → 网页 → 推送）
 turnover.py               两市成交额页面（换手率标准化 → web/turnover.html）
 leverage.py               杠杆资金（融资余额 ÷ 流通市值 → web/leverage.html）
-portal.py                 门户首页生成器（读三张页面的 DATA → web/portal.html）
+sentiment.py              反向情绪监控（四类数据源 → web/sentiment.html）
+portal.py                 门户首页生成器（读四张页面的 DATA → web/portal.html）
 daily_update.sh           每日更新：抓数 → 页面 → git 提交 → 重新部署
 data/                     原始序列与周度台账
 reports/                  每周周报与走势图
-web/                      交互页面（*_template.html 是模板，portal.html / index.html / turnover.html / leverage.html 是生成物）
+web/                      交互页面（*_template.html 是模板，portal.html / index.html / turnover.html / leverage.html / sentiment.html 是生成物）
 analysis/                 一次性分析脚本（利率归因、口径对比）
 memory/                   跨 agent 共用的本地记忆（随仓库提交，见下节）
 ```
@@ -211,7 +232,8 @@ memory/                   跨 agent 共用的本地记忆（随仓库提交，�
 
 ## 边界
 
-- 单一指标，不能替代仓位管理与风险预算。
+- 单一指标，不能替代仓位管理与风险预算；反向情绪页的温度是情绪刻度（0 冰点 / 100 过热），不是买卖信号。
+- 基金现金为 25 只主动权益基金的季度加权样本，不等于全市场公募平均；开户分位样本从 2021-12 起。
 - 分位对窗口敏感：5 年与 10 年结论可能不同，报告同时给出。
 - 10Y 国债已在 1.6% 附近，利率对任何比值型指标都有放大效应；400bp 参考线的历史含义会随时间弱化。
 - 免费数据源无 SLA，只适合个人监控，不适合对外披露。

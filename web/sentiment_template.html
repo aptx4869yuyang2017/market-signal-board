@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>反向情绪监控</title>
+<style>
+  :root{
+    --orange:#e8833a; --ink:#1f2328;
+    --muted:#6b7280; --line:#e8e6e1; --bg:#f7f6f3; --card:#ffffff;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1320px; margin:0 auto; padding:20px 24px 40px}
+  .layout{display:flex; gap:16px; align-items:flex-start}
+  .sidebar{width:112px; flex-shrink:0; display:flex; flex-direction:column; gap:8px; padding-top:4px; position:sticky; top:16px}
+  .sidebar a{display:block; text-align:center; text-decoration:none; border:1px solid var(--line); background:#fff; color:var(--muted);
+             padding:11px 6px; border-radius:10px; font-size:13px; line-height:1.3; transition:.15s}
+  .sidebar a:hover{border-color:#c9c4ba; color:var(--ink)}
+  .sidebar a.on{background:var(--ink); border-color:var(--ink); color:#fff}
+  .main{flex:1; min-width:0}
+  header{display:flex; justify-content:space-between; align-items:flex-end; gap:16px; flex-wrap:wrap; margin-bottom:12px}
+  h1{margin:0; font-size:23px; letter-spacing:.5px}
+  h1 .accent{color:var(--orange)}
+  .sub{margin:5px 0 0; color:var(--muted); font-size:12.5px}
+  .chip{display:inline-block; padding:2px 9px; border-radius:999px; background:#fff;
+        border:1px solid var(--line); color:var(--muted); font-size:11.5px; margin-left:8px}
+  .updated{color:var(--muted); font-size:11.5px; text-align:right; line-height:1.5}
+
+  .composite{
+    background:#fff; border:1px solid var(--line); border-radius:12px;
+    padding:14px 18px; margin-bottom:12px; display:flex; gap:18px;
+    align-items:center; flex-wrap:wrap;
+  }
+  .composite .score{font-size:38px; font-weight:650; line-height:1; font-variant-numeric:tabular-nums; min-width:112px}
+  .composite .score small{font-size:13px; font-weight:500; color:var(--muted); margin-left:5px}
+  .composite .body{flex:1; min-width:260px}
+  .composite .tag{
+    display:inline-block; font-size:12px; font-weight:600; color:#fff;
+    padding:3px 11px; border-radius:999px; margin-right:8px;
+  }
+  .composite .note{font-size:13px; color:var(--muted); margin-top:6px; line-height:1.6}
+  .track{height:7px; border-radius:99px; background:#eeece7; margin-top:10px; position:relative; overflow:hidden}
+  .track i{position:absolute; left:0; top:0; bottom:0; border-radius:99px; display:block}
+  .track-label{display:flex; justify-content:space-between; font-size:10.5px; color:#9aa1aa; margin-top:5px}
+
+  .cards{display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:14px}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px; min-width:0}
+  .card .k{font-size:11.5px; color:var(--muted); letter-spacing:.3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .card .v{font-size:25px; font-weight:600; margin-top:6px; line-height:1.1; font-variant-numeric:tabular-nums}
+  .card .d{font-size:11px; color:var(--muted); margin-top:6px; line-height:1.5}
+  .pill{display:inline-block; padding:2px 9px; border-radius:999px; font-size:11px; font-weight:600;
+        border:1px solid transparent; margin-top:7px}
+
+  .charts{display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin-bottom:14px}
+  .panel{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px 6px; min-width:0}
+  .panel.wide{margin-bottom:14px}
+  .panel h2{font-size:13px; margin:2px 0 0; color:var(--ink); font-weight:600}
+  .panel .hint{font-size:11px; color:#9aa0a6; margin:3px 0 0; line-height:1.5}
+  .ranges{display:flex; gap:4px; margin-top:8px; flex-wrap:wrap}
+  .ranges button{font:inherit; font-size:11px; color:var(--muted); background:#faf9f7;
+                 border:1px solid var(--line); border-radius:6px; padding:3px 9px; cursor:pointer; transition:.12s}
+  .ranges button:hover{border-color:#c9c4ba; color:var(--ink)}
+  .ranges button.on{background:var(--ink); border-color:var(--ink); color:#fff}
+  .ranges button.bench-toggle{margin-left:10px; border-style:dashed; color:#9a948b}
+  .ranges button.bench-toggle.on{background:#eeece7; border-color:#c9c3b9; color:#6b6257}
+  .ranges .zoom-tip{font-size:10px; color:#b0b4ba; margin-left:auto; align-self:center}
+  .chart{height:265px; width:100%}
+  .chart.wide{height:300px}
+  h2.section{font-size:13.5px; margin:6px 4px 10px; color:var(--muted); font-weight:500; letter-spacing:.5px}
+  .notes{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:8px 18px; margin-bottom:14px}
+  .notes li{font-size:12.5px; color:#4b5157; line-height:1.75; padding:7px 0; border-bottom:1px solid #f2f0ec}
+  .notes li:last-child{border-bottom:none}
+  footer{margin-top:18px; color:#9aa0a6; font-size:11.5px; line-height:1.9}
+  footer b{color:var(--muted); font-weight:500}
+  @media (max-width:1080px){ .cards{grid-template-columns:repeat(2,1fr)} }
+  @media (max-width:760px){
+    .layout{flex-direction:column}
+    .sidebar{width:100%; flex-direction:row; position:static; flex-wrap:wrap}
+    .sidebar a{flex:1; min-width:60px}
+    .cards{grid-template-columns:repeat(2,1fr)}
+    .charts{grid-template-columns:1fr}
+    .wrap{padding:16px 12px 32px}
+    .chart{height:245px}
+    .chart.wide{height:280px}
+    .ranges .zoom-tip{display:none}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="layout">
+    <aside class="sidebar">
+      <a href="./portal.html">首页</a>
+      <a href="./index.html">股债<br>性价比</a>
+      <a href="./turnover.html">两市<br>成交额</a>
+      <a href="./leverage.html">杠杆<br>资金</a>
+      <a href="./sentiment.html" class="on">反向<br>情绪</a>
+    </aside>
+
+    <div class="main">
+      <header>
+        <div>
+          <h1>反向<span class="accent">情绪</span>监控</h1>
+          <p class="sub">
+            市场总体会犯错 · 机构子弹 / 杠杆情绪 / 开户情绪 / 北向活跃度 · 数据截止 <b id="asof">—</b>
+            <span class="chip">每交易日 08:30 自动更新</span>
+          </p>
+        </div>
+        <div class="updated">最近生成<br><span id="updated">—</span></div>
+      </header>
+
+      <section class="composite" id="composite">
+        <div class="score"><span id="sc-score">—</span><small>/ 100</small></div>
+        <div class="body">
+          <span class="tag" id="sc-tier">—</span>
+          <span style="font-size:12px;color:#6b7280">四项反向指标市场温度（越高越热 / 越低越冷）</span>
+          <div class="note" id="sc-text">—</div>
+          <div class="track"><i id="sc-bar"></i></div>
+          <div class="track-label"><span>0 冰点 / 悲观</span><span>50 中性</span><span>100 过热 / 贪婪</span></div>
+        </div>
+      </section>
+
+      <section class="cards">
+        <div class="card" id="fd-card">
+          <div class="k">机构子弹 · 基金现金比例</div>
+          <div class="v" id="fd-cash">—</div>
+          <div class="d" id="fd-cash-d">—</div>
+          <span class="pill" id="fd-cash-badge">—</span>
+        </div>
+        <div class="card" id="mg-card">
+          <div class="k">杠杆情绪 · 融资余额 20 日</div>
+          <div class="v" id="mg-chg">—</div>
+          <div class="d" id="mg-chg-d">—</div>
+          <span class="pill" id="mg-chg-badge">—</span>
+        </div>
+        <div class="card" id="ac-card">
+          <div class="k">开户情绪 · A 股个人新开户</div>
+          <div class="v" id="ac-new">—</div>
+          <div class="d" id="ac-new-d">—</div>
+          <span class="pill" id="ac-new-badge">—</span>
+        </div>
+        <div class="card" id="nt-card">
+          <div class="k">北向活跃度 · 相对成交活跃度</div>
+          <div class="v" id="nt-deal">—</div>
+          <div class="d" id="nt-deal-d">—</div>
+          <span class="pill" id="nt-badge">—</span>
+        </div>
+      </section>
+
+      <section class="panel wide">
+        <h2>整体温度趋势（四项温度等权平均）</h2>
+        <p class="hint">越高越热、越低越冷 · 底色为温度档位 · 灰线为中证全指（右轴）· 图例可开关四项温度与指数 · 数据起自 2022-01（开户样本满一年后）</p>
+        <div class="chart wide" id="chart-temp"></div>
+      </section>
+
+      <div class="charts">
+        <section class="panel">
+          <h2>基金现金比例（季度 · 净资产加权）</h2>
+          <p class="hint" id="fd-hint">—</p>
+          <div class="chart" id="chart-fund"></div>
+        </section>
+        <section class="panel">
+          <h2>融资余额 20 日变化（日频）</h2>
+          <p class="hint" id="mg-hint">—</p>
+          <div class="chart" id="chart-margin"></div>
+        </section>
+        <section class="panel">
+          <h2>A 股个人新开户（月度 · 万户）</h2>
+          <p class="hint">上交所统计月报，2021-12 起；未来月份 0 值已剔除。</p>
+          <div class="chart" id="chart-account"></div>
+        </section>
+        <section class="panel">
+          <h2>北向相对成交活跃度（20 日均 ÷ 250 日均）</h2>
+          <p class="hint">低于 1 表示较自身长期水平萎缩 · 底色为五档情绪分位 · 只反映活跃度，不表示流入或流出。</p>
+          <div class="chart" id="chart-north"></div>
+        </section>
+      </div>
+
+      <h2 class="section">当前读数与口径提醒</h2>
+      <ul class="notes" id="notes"></ul>
+
+      <footer>
+        <b>辅助曲线：</b>每张图右轴那条浅灰线是中证全指（日频点位，取「当日或之前最近交易日」对齐），只用来把指标的拐点与大盘涨跌放在一起看；它不参与分位和温度计算，可用图表上方「中证全指」按钮单独开关。<br>
+        <b>市场温度：</b>100−基金现金分位、融资余额 20 日变化分位、开户分位、北向相对活跃度分位，四项等权平均。
+        0 为冰点（极端悲观，左侧分批建仓窗口），100 为过热（贪婪拥挤，以防守和再平衡为主）；它是情绪刻度，不是买卖信号。<br>
+        <b>北向去趋势：</b>成交额长期增长会让绝对额分位长期贴在 80 以上，故温度与北向图都用「20 日均额 ÷ 250 日均额」的相对活跃度，
+        只反映相对近期自身是放大还是萎缩；图上底色为该比值的全样本五档分位，配色与温度档位一致。tooltip 仍给出绝对成交额供参考。<br>
+        <b>数据源：</b>天天基金 F10 定期报告（基金现金，季度）、乐咕（基金股票仓位，周度估算）、
+        东方财富两融日频（融资余额）、上交所上证统计月报（开户，月度）、东方财富沪深港通（北向成交额，日频）。<br>
+        <b>北向局限：</b>自 2024-08-19 起交易所不再披露北向每日净买入/净卖出，本页只用成交总额衡量活跃度，
+        不提供也不估算净流向；软件上的「实时北向流入」多为第三方估算，不可与本页混用。<br>
+        <b>边界：</b>基金现金为 25 只主动权益基金的加权样本且按季披露；开户分位样本从 2021-12 起；
+        融资余额快速下降也可能是政策或季节性因素。免费源无 SLA，页面为静态快照，仅适合个人监控，不构成投资建议。
+      </footer>
+    </div>
+  </div>
+</div>
+
+<script src="./echarts.min.js"></script>
+<script>
+const DATA = __DATA__;
+
+const fmt = (v, d) => (v === null || v === undefined || isNaN(v)) ? '—' : Number(v).toFixed(d);
+const signed = (v, d, unit) => (v > 0 ? '+' : '') + fmt(v, d) + (unit || '');
+
+function setPill(id, stat, text) {
+  const el = document.getElementById(id);
+  el.textContent = text;
+  el.style.color = stat.score_color;
+  el.style.background = stat.score_bg;
+  el.style.borderColor = stat.score_border;
+}
+
+function cardTint(id, stat) {
+  const el = document.getElementById(id);
+  el.style.background = stat.score_bg;
+  el.style.borderColor = stat.score_border;
+}
+
+function renderStatic() {
+  document.getElementById('asof').textContent = DATA.asof;
+  document.getElementById('updated').textContent = DATA.updated;
+}
+
+function renderComposite() {
+  const c = DATA.composite;
+  document.getElementById('sc-score').textContent = fmt(c.score, 1);
+  const tag = document.getElementById('sc-tier');
+  tag.textContent = c.tier;
+  tag.style.background = c.color;
+  const box = document.getElementById('composite');
+  box.style.borderColor = c.border;
+  const note = document.getElementById('sc-text');
+  note.textContent = c.note;
+  note.style.color = c.color;
+  const bar = document.getElementById('sc-bar');
+  bar.style.width = c.score + '%';
+  bar.style.background = c.color;
+}
+
+function renderCards() {
+  const s = DATA.stats;
+
+  const f = s.fund;
+  cardTint('fd-card', f);
+  document.getElementById('fd-cash').textContent = fmt(f.cash, 2) + '%';
+  document.getElementById('fd-cash').style.color = f.score_color;
+  document.getElementById('fd-cash-d').innerHTML =
+    '较上季 <b>' + signed(f.cash_chg, 2, 'pp') + '</b> · 分位 ' + fmt(f.cash_pct, 1) + '% · '
+    + f.funds + ' 只基金 · ' + f.asof;
+  setPill('fd-cash-badge', f, '子弹温度 ' + fmt(f.score, 1));
+  document.getElementById('fd-hint').textContent =
+    '最新 ' + f.asof + ' · ' + f.funds + ' 只样本 · 全样本股票仓位（周度估算）'
+    + fmt(f.stock_pos, 2) + '%（' + f.stock_pos_asof + '，仅辅助）';
+
+  const m = s.margin;
+  cardTint('mg-card', m);
+  const mv = document.getElementById('mg-chg');
+  mv.textContent = signed(m.chg20, 2, '%');
+  mv.style.color = m.color;
+  document.getElementById('mg-chg-d').innerHTML =
+    '融资余额 ' + fmt(m.balance_wan, 2) + ' 万亿 · 距近一年高点 '
+    + fmt(m.drawdown, 2) + '% · <b style="color:' + m.color + '">' + m.tier + '</b> · ' + m.asof;
+  setPill('mg-chg-badge', m, '杠杆温度 ' + fmt(m.score, 1));
+  document.getElementById('mg-hint').textContent =
+    '虚线为 −8% / −4% / +2% 档位阈值；跌得越快，杠杆平仓压力越大。数据截止 ' + m.asof;
+
+  const a = s.account;
+  cardTint('ac-card', a);
+  document.getElementById('ac-new').textContent = fmt(a.new_a, 2) + ' 万户';
+  document.getElementById('ac-new').style.color = a.score_color;
+  document.getElementById('ac-new-d').innerHTML =
+    '环比 ' + signed(a.mom, 1, '%') + ' · 同比 ' + signed(a.yoy, 1, '%')
+    + ' · 分位 ' + fmt(a.pct, 1) + '% · ' + a.asof;
+  setPill('ac-new-badge', a, '开户温度 ' + fmt(a.score, 1));
+
+  const n = s.north;
+  cardTint('nt-card', n);
+  document.getElementById('nt-deal').textContent = fmt(n.rel_activity, 3);
+  document.getElementById('nt-deal').style.color = n.score_color;
+  document.getElementById('nt-deal-d').innerHTML =
+    '20 日均 ' + fmt(n.deal_ma20, 0) + ' 亿 · 5 日均 ' + fmt(n.deal_ma5, 0)
+    + ' 亿 · 分位 ' + fmt(n.deal_pct, 1) + '% · <b>净流向已停止披露</b> · ' + n.asof;
+  setPill('nt-badge', n, '北向温度 ' + fmt(n.score, 1));
+}
+
+function renderNotes() {
+  const ul = document.getElementById('notes');
+  DATA.notes.forEach(t => {
+    const li = document.createElement('li');
+    li.textContent = t;
+    ul.appendChild(li);
+  });
+}
+
+const axisBase = {
+  axisLine: {lineStyle: {color: '#e2dfd8'}},
+  axisTick: {show: false},
+  splitLine: {lineStyle: {color: '#f0eee9', type: 'dotted'}},
+  axisLabel: {color: '#8a8f98', fontSize: 10, hideOverlap: true}
+};
+
+// 辅助曲线：中证全指（日频，右轴灰线），只做参照，不参与任何评分
+const BENCH = DATA.series.benchmark && DATA.series.benchmark.dates
+  ? DATA.series.benchmark.dates.map((d, i) => [d, DATA.series.benchmark.close[i]]) : [];
+
+function benchSeries() {
+  return {
+    name: '中证全指', type: 'line', yAxisIndex: 1, data: BENCH,
+    showSymbol: false, silent: true, tooltip: {show: false}, z: 0,
+    lineStyle: {width: 1.2, color: '#b9b3a8', opacity: .8},
+    itemStyle: {color: '#b9b3a8'}
+  };
+}
+
+// 按原始日期取「当日或之前最近交易日」的指数收盘，避免月度/季度日期对不齐
+function benchAt(dateStr) {
+  const b = DATA.series.benchmark;
+  if (!b || !b.dates.length) return null;
+  const key = (dateStr || '').length === 7 ? dateStr + '-01' : dateStr;
+  let lo = 0, hi = b.dates.length - 1, ans = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (b.dates[mid] <= key) { ans = mid; lo = mid + 1; } else { hi = mid - 1; }
+  }
+  return ans < 0 ? null : b.close[ans];
+}
+
+function baseOption() {
+  const left = Object.assign({type: 'value', scale: true}, axisBase);
+  const right = {
+    type: 'value', scale: true, position: 'right',
+    axisLine: {show: false}, axisTick: {show: false}, splitLine: {show: false},
+    axisLabel: {color: '#a8a49c', fontSize: 9, formatter: v => Number(v).toFixed(0)}
+  };
+  return {
+    animation: false,
+    grid: {left: 52, right: 54, top: 26, bottom: 58},
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: 'rgba(255,255,255,.97)',
+      borderColor: '#e8e6e1',
+      textStyle: {color: '#1f2328', fontSize: 12}
+    },
+    axisPointer: {lineStyle: {color: '#c9c5bd', type: 'dashed'}},
+    toolbox: {right: 2, top: 0, feature: {saveAsImage: {title: '导出图片', pixelRatio: 2}}},
+    xAxis: Object.assign({type: 'time'}, axisBase, {splitLine: {show: false}}),
+    yAxis: [left, right],
+    dataZoom: [
+      {type: 'inside', xAxisIndex: 0, start: 0, end: 100,
+       zoomOnMouseWheel: true, moveOnMouseMove: true, moveOnMouseWheel: false},
+      {type: 'slider', xAxisIndex: 0, start: 0, end: 100,
+       bottom: 4, height: 16, borderColor: 'transparent',
+       backgroundColor: '#f4f2ee', fillerColor: 'rgba(232,131,58,.12)',
+       handleStyle: {color: '#fff', borderColor: '#d9d5cd'},
+       dataBackground: {lineStyle: {color: '#c9c5bd'}, areaStyle: {color: '#eeeeea'}},
+       textStyle: {color: '#9aa0a6', fontSize: 9}}
+    ]
+  };
+}
+
+function leftAxis(extra) {
+  const ys = baseOption().yAxis;
+  if (extra) Object.assign(ys[0], extra);
+  return ys;
+}
+
+// 右下角数据源水印，用 ECharts graphic 画，导出图片也会带上
+function sourceTag(text) {
+  return [{
+    type: 'text', right: 8, bottom: 22, silent: true, z: 1,
+    style: {text: '数据源：' + text, fill: '#b9b5ad', font: '9.5px -apple-system, sans-serif'}
+  }];
+}
+
+// 与其余页面一致：按最近 N 年在 dates 中定位起点，返回 dataZoom 百分比
+function yearsAgoStartFor(dates, years) {
+  if (!years || !dates.length) return [0, 100];
+  const n = dates.length;
+  const cutoff = new Date(dates[n - 1]).getTime() - years * 365.25 * 864e5;
+  let i = 0;
+  while (i < n && new Date(dates[i]).getTime() < cutoff) i++;
+  return [Math.max(0, i / Math.max(1, n - 1) * 100), 100];
+}
+
+function applyZoom(chart, dates, years, bar, btn) {
+  const [start, end] = yearsAgoStartFor(dates, years);
+  chart.dispatchAction({type: 'dataZoom', dataZoomIndex: 0, start, end});
+  chart.dispatchAction({type: 'dataZoom', dataZoomIndex: 1, start, end});
+  if (bar) {
+    bar.querySelectorAll('button[data-years]').forEach(b => b.classList.remove('on'));
+    if (btn) btn.classList.add('on');
+    else bar.querySelector('button[data-years="0"]').classList.add('on');
+  }
+}
+
+// 两条线共存时先认准指标点，避免拿指数线的日期当标题
+function tipPoint(ps, name) {
+  return (ps || []).find(p => p.seriesName === name) || (ps || [])[0];
+}
+
+// tooltip 标题直接用数据点自带的原始日期（月度是 YYYY-MM，不能被时间轴补成 1 日）
+function tooltipDate(ps, name) {
+  const p = tipPoint(ps, name);
+  if (!p) return '';
+  const raw = p.value && p.value[0];
+  if (typeof raw === 'string' && raw) return raw;
+  if (typeof raw === 'number' && isFinite(raw)) {
+    const d = new Date(raw);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+      + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  return String(p.axisValue == null ? '' : p.axisValue);
+}
+
+function ptValue(ps, name) {
+  const p = tipPoint(ps, name);
+  return p && p.value ? p.value[1] : null;
+}
+
+function benchLine(ps, name, state) {
+  if (!state || !state.bench || !BENCH.length) return '';
+  const p = tipPoint(ps, name);
+  if (!p) return '';
+  const v = benchAt(p.value && p.value[0]);
+  return '<div style="color:#9aa0a6;margin-top:5px">中证全指 <b style="color:#8b8479">'
+    + (v == null ? '—' : fmt(v, 0)) + '</b></div>';
+}
+
+function addRangeControl(chart, el, dates, state) {
+  const bar = document.createElement('div');
+  bar.className = 'ranges';
+  bar.innerHTML = '<button data-years="1">1 年</button><button data-years="3" class="on">3 年</button>'
+    + '<button data-years="5">5 年</button><button data-years="0">全部</button>'
+    + (BENCH.length ? '<button class="bench-toggle on" title="切换右轴灰线">中证全指</button>' : '')
+    + '<span class="zoom-tip">滚轮缩放 · 拖动下方滑块</span>';
+  el.parentNode.insertBefore(bar, el);
+  bar.querySelectorAll('button[data-years]').forEach(btn => {
+    btn.addEventListener('click', () => applyZoom(chart, dates, Number(btn.dataset.years), bar, btn));
+  });
+  // 默认 3 年：setOption 里是 0–100，这里同步把每张图缩放到最近 3 年
+  applyZoom(chart, dates, 3, bar, bar.querySelector('button[data-years="3"]'));
+  const toggle = bar.querySelector('.bench-toggle');
+  if (toggle) {
+    // 中证全指不一定是第 2 条 series（温度图里在最后），按名字定位
+    const opt = chart.getOption();
+    const bi = (opt.series || []).findIndex(s => s.name === '中证全指');
+    toggle.addEventListener('click', () => {
+      state.bench = !state.bench;
+      toggle.classList.toggle('on', state.bench);
+      if (bi < 0) return;
+      const patch = [];
+      for (let k = 0; k <= bi; k++) patch.push({});
+      patch[bi] = {data: state.bench ? BENCH : [], lineStyle: {opacity: state.bench ? .8 : 0}};
+      chart.setOption({series: patch});
+    });
+  }
+  chart.getZr().on('dblclick', () => applyZoom(chart, dates, 0, bar));
+}
+
+function initChart(id, dates, option, state) {
+  if (typeof echarts === 'undefined') throw new Error('echarts.min.js 未加载');
+  const el = document.getElementById(id);
+  const chart = echarts.init(el);
+  chart.setOption(option);
+  addRangeControl(chart, el, dates, state);
+  window.addEventListener('resize', () => chart.resize());
+  return chart;
+}
+
+// 档位背景带：从 payload 的 tiers 生成，0 到下界 / label 上界
+function tierBands() {
+  const tiers = DATA.tiers || [];
+  const bands = [];
+  let lo = 0;
+  tiers.forEach((t, i) => {
+    const hi = Math.min(t.max, 100);
+    if (hi > lo) {
+      bands.push([
+        {yAxis: lo, itemStyle: {color: t.color + (i % 2 ? '0c' : '14')}},
+        {yAxis: hi}
+      ]);
+    }
+    lo = hi;
+  });
+  return bands;
+}
+
+function tempTooltip(ps) {
+  const t = DATA.series.temperature;
+  const p = tipPoint(ps, '综合温度');
+  const d = p && p.value ? p.value[0] : (ps[0] && ps[0].axisValue);
+  let i = t.dates.indexOf(d);
+  if (i < 0) {
+    // 月度/日频对不齐时按时间找最近的一个
+    const ts = new Date(d).getTime();
+    i = t.dates.findIndex(x => new Date(x).getTime() >= ts);
+    if (i < 0) i = t.dates.length - 1;
+  }
+  const score = i >= 0 ? t.score[i] : null;
+  const tier = score == null ? null : (DATA.tiers || []).find(x => score < x.max);
+  let html = '<div style="font-weight:600;margin-bottom:6px">' + (d || '') + (tier ? ' · ' + tier.label : '') + '</div>';
+  html += '<div>综合温度 <b style="font-size:14px;color:' + (tier ? tier.color : '#1f2328') + '">'
+    + fmt(score, 1) + '</b> <span style="color:#9aa0a6">/ 100</span></div>';
+  const parts = [
+    ['基金现金温度', t.fund[i], '#2f6f9f'],
+    ['融资温度', t.margin[i], '#3b6ea5'],
+    ['开户温度', t.account[i], '#5b8db8'],
+    ['北向温度', t.north[i], '#c9a06a']
+  ];
+  parts.forEach(row => {
+    html += '<div style="margin-top:3px"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:'
+      + row[2] + ';margin-right:6px"></span>' + row[0] + ' <b>' + fmt(row[1], 1) + '</b></div>';
+  });
+  const bi = benchAt(d);
+  if (stTemp.bench && bi != null) {
+    html += '<div style="color:#9aa0a6;margin-top:5px">中证全指 <b style="color:#8b8479">' + fmt(bi, 0) + '</b></div>';
+  }
+  return html;
+}
+
+let stTemp = null;
+
+function renderTempChart(ss, pairs, state) {
+  stTemp = state;
+  const t = ss.temperature;
+  if (!t || !t.dates.length) return;
+  const bands = tierBands();
+  // 档位分界线
+  const lines = (DATA.tiers || []).slice(0, -1).map(x => ({
+    yAxis: x.max, lineStyle: {color: '#d6d1c8', type: 'dashed', width: 1},
+    label: {formatter: x.max, color: '#a8a49c', fontSize: 10,
+            backgroundColor: 'rgba(255,255,255,.85)', padding: [1, 3]}
+  }));
+
+  initChart('chart-temp', t.dates, Object.assign(baseOption(), {
+    graphic: sourceTag('四项指标综合计算 · 见页脚'),
+    grid: {left: 52, right: 54, top: 30, bottom: 58},
+    legend: {
+      data: ['综合温度', '基金现金温度', '融资温度', '开户温度', '北向温度', '中证全指'],
+      selected: {'基金现金温度': false, '融资温度': false, '开户温度': false, '北向温度': false},
+      top: 0, left: 0, icon: 'roundRect', itemWidth: 13, itemHeight: 3,
+      textStyle: {color: '#6b7280', fontSize: 10.5}
+    },
+    yAxis: leftAxis({min: 0, max: 100, interval: 20,
+                     axisLabel: {color: '#8a8f98', fontSize: 10, formatter: v => v}}),
+    tooltip: Object.assign(baseOption().tooltip, {formatter: tempTooltip}),
+    series: [
+      {name: '综合温度', type: 'line', showSymbol: false, data: pairs(t.dates, t.score),
+       lineStyle: {width: 2.2, color: '#3b6ea5'}, itemStyle: {color: '#3b6ea5'}, z: 4,
+       areaStyle: {color: 'rgba(59,110,165,.08)'},
+       markArea: {silent: true, animation: false, data: bands},
+       markLine: {silent: true, symbol: 'none', animation: false, data: lines}},
+      {name: '基金现金温度', type: 'line', showSymbol: false, data: pairs(t.dates, t.fund),
+       lineStyle: {width: 1.1, color: '#2f6f9f', opacity: .75}, itemStyle: {color: '#2f6f9f'}, z: 3},
+      {name: '融资温度', type: 'line', showSymbol: false, data: pairs(t.dates, t.margin),
+       lineStyle: {width: 1.1, color: '#3b6ea5', opacity: .75}, itemStyle: {color: '#3b6ea5'}, z: 3},
+      {name: '开户温度', type: 'line', showSymbol: false, data: pairs(t.dates, t.account),
+       lineStyle: {width: 1.1, color: '#5b8db8', opacity: .75}, itemStyle: {color: '#5b8db8'}, z: 3},
+      {name: '北向温度', type: 'line', showSymbol: false, data: pairs(t.dates, t.north),
+       lineStyle: {width: 1.1, color: '#c9a06a', opacity: .75}, itemStyle: {color: '#c9a06a'}, z: 3},
+      benchSeries()
+    ]
+  }), state);
+}
+
+function renderCharts() {
+  const ss = DATA.series;
+  const pairs = (dates, values) => dates.map((d, i) => [d, values[i]]);
+  const newState = () => ({bench: true});
+  const stFund = newState(), stMargin = newState(), stAccount = newState(), stNorth = newState();
+
+  // 整体温度趋势
+  renderTempChart(ss, pairs, newState());
+
+  initChart('chart-fund', ss.fund.dates, Object.assign(baseOption(), {
+    graphic: sourceTag('天天基金 F10 季报 · 季度 / 加权'),
+    tooltip: Object.assign(baseOption().tooltip, {
+      formatter: ps => tooltipDate(ps, '现金比例') + '<br>现金比例 <b>' + fmt(ptValue(ps, '现金比例'), 2) + '%</b>'
+        + benchLine(ps, '现金比例', stFund)
+    }),
+    yAxis: leftAxis({axisLabel: {color: '#8a8f98', fontSize: 10, formatter: v => v + '%'}}),
+    series: [{
+      name: '现金比例', type: 'line', showSymbol: false,
+      data: pairs(ss.fund.dates, ss.fund.cash),
+      lineStyle: {width: 2, color: '#2f6f9f'}, itemStyle: {color: '#2f6f9f'},
+      areaStyle: {color: 'rgba(47,111,159,.10)'}
+    }, benchSeries()]
+  }), stFund);
+
+  initChart('chart-margin', ss.margin.dates, Object.assign(baseOption(), {
+    graphic: sourceTag('东方财富融资融券 · 日频'),
+    tooltip: Object.assign(baseOption().tooltip, {
+      formatter: ps => tooltipDate(ps, '融资余额20日变化') + '<br>20 日变化 <b>'
+        + signed(ptValue(ps, '融资余额20日变化'), 2, '%') + '</b>'
+        + benchLine(ps, '融资余额20日变化', stMargin)
+    }),
+    yAxis: leftAxis({axisLabel: {color: '#8a8f98', fontSize: 10, formatter: v => v + '%'}}),
+    series: [{
+      name: '融资余额20日变化', type: 'line', showSymbol: false,
+      data: pairs(ss.margin.dates, ss.margin.chg20),
+      lineStyle: {width: 1.8, color: '#3b6ea5'}, itemStyle: {color: '#3b6ea5'},
+      markLine: {
+        silent: true, symbol: 'none', animation: false,
+        lineStyle: {color: '#d6d1c8', type: 'dashed', width: 1},
+        label: {color: '#a8a49c', fontSize: 10, position: 'insideStartTop',
+                backgroundColor: 'rgba(255,255,255,.85)', padding: [1, 3]},
+        data: [{yAxis: -8, label: {formatter: '−8%'}},
+               {yAxis: -4, label: {formatter: '−4%'}},
+               {yAxis: 2, label: {formatter: '+2%'}}]
+      }
+    }, benchSeries()]
+  }), stMargin);
+
+  initChart('chart-account', ss.account.dates, Object.assign(baseOption(), {
+    graphic: sourceTag('上交所统计月报 · 月度'),
+    tooltip: Object.assign(baseOption().tooltip, {
+      formatter: ps => tooltipDate(ps, 'A股个人新开户') + '<br>新开户 <b>'
+        + fmt(ptValue(ps, 'A股个人新开户'), 2) + ' 万户</b>'
+        + benchLine(ps, 'A股个人新开户', stAccount)
+    }),
+    series: [{
+      name: 'A股个人新开户', type: 'bar', barMaxWidth: 8,
+      data: pairs(ss.account.dates, ss.account.new_a),
+      itemStyle: {color: '#5b8db8'}
+    }, benchSeries()]
+  }), stAccount);
+
+  // 北向背景带：把五档分位映射到相对活跃度轴，配色与温度档位一致
+  const nb = (ss.north.bands || []);
+  const nbands = nb.map((b, i) => [
+    {yAxis: b.lo, itemStyle: {color: b.color + (i % 2 ? '0c' : '14')}},
+    {yAxis: b.hi}
+  ]);
+  function northTier(v) {
+    const b = nb.find(x => v >= x.lo && v < x.hi);
+    return b ? b : (nb.length ? nb[nb.length - 1] : null);
+  }
+
+  initChart('chart-north', ss.north.dates, Object.assign(baseOption(), {
+    graphic: sourceTag('东方财富沪深港通 · 日频 · 去趋势'),
+    grid: {left: 52, right: 54, top: 26, bottom: 58},
+    tooltip: Object.assign(baseOption().tooltip, {
+      formatter: ps => {
+        const ratio = ptValue(ps, '北向相对活跃度');
+        if (ratio == null) return tooltipDate(ps, '北向相对活跃度');
+        const tier = northTier(ratio);
+        let html = '<div style="font-weight:600;margin-bottom:5px">'
+          + tooltipDate(ps, '北向相对活跃度')
+          + (tier ? ' · <span style="color:' + tier.color + '">' + tier.label + '</span>' : '')
+          + '</div>';
+        html += '相对活跃度 <b>' + fmt(ratio, 3) + '</b>'
+          + ' <span style="color:#9aa0a6">（&lt;1 为萎缩）</span><br>';
+        const dealIdx = ss.north.dates.indexOf(tooltipDate(ps, '北向相对活跃度'));
+        if (dealIdx >= 0) {
+          html += '20 日均成交 <b>' + fmt(ss.north.deal_ma20[dealIdx], 0) + '</b> 亿元<br>';
+        }
+        html += benchLine(ps, '北向相对活跃度', stNorth);
+        return html;
+      }
+    }),
+    yAxis: Object.assign(baseOption().yAxis, {
+      min: 0.7,
+      axisLabel: {color: '#8a8f98', fontSize: 10, formatter: v => v.toFixed(2)}
+    }),
+    series: [{
+      name: '北向相对活跃度', type: 'line', showSymbol: false,
+      data: pairs(ss.north.dates, ss.north.rel_activity),
+      lineStyle: {width: 1.8, color: '#c9a06a'}, itemStyle: {color: '#c9a06a'},
+      areaStyle: {color: 'rgba(201,160,106,.10)'},
+      markArea: {silent: true, animation: false, data: nbands},
+      markLine: {
+        silent: true, symbol: 'none', animation: false,
+        lineStyle: {color: '#b9b3aa', type: 'dashed', width: 1},
+        label: {formatter: '长期均线', color: '#a8a49c', fontSize: 10, position: 'insideEndTop'},
+        data: [{yAxis: 1}]
+      }
+    }, benchSeries()]
+  }), stNorth);
+}
+
+renderStatic();
+renderComposite();
+renderCards();
+renderNotes();
+try {
+  renderCharts();
+} catch (e) {
+  document.querySelectorAll('.chart').forEach(el => {
+    el.innerHTML = '<div style="padding:48px 12px;text-align:center;color:#b04a3a;font-size:12px">'
+      + '图表未能加载：' + e.message + '<br>请确认 echarts.min.js 与 sentiment.html 在同一目录。</div>';
+  });
+}
+</script>
+</body>
+</html>

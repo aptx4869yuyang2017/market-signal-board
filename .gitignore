@@ -8,6 +8,7 @@ __pycache__/
 # 缓存与 IDE 产物（含本机用户名路径）
 cache/
 .trae-html-share-packages/
+.workbuddy/
 
 # 生成物
 reports/
